@@ -9,15 +9,26 @@
 
 ---
 
-### 1.1 Plugin Scaffold
+### 1.1 Plugin Scaffold ✅ Complete (2026-06-22)
 
-- [ ] Create main plugin file with WordPress headers, constants, bootstrap
-  - Define `PLUGIN_FILE`, `PLUGIN_DIR`, `PLUGIN_URL`, `PLUGIN_VERSION`, `PRODUCT_ID`
-  - Register activation / deactivation / uninstall hooks
-- [ ] Set up PSR-4 autoloader (Composer or manual class map)
-- [ ] Create folder structure: `app/Models`, `app/Controllers`, `app/Services`, `app/Hooks`, `includes/Database`, `includes/Api`, `src/blocks`, `build`, `assets`
-- [ ] Add `composer.json` with Action Scheduler as a dependency
-- [ ] Confirm plugin activates on local Laragon environment without errors
+- [x] Create main plugin file with WordPress headers, constants, bootstrap
+  - `STCRM_VERSION`, `STCRM_DB_VERSION`, `STCRM_PLUGIN_DIR`, `STCRM_PLUGIN_URL`, `STCRM_PLUGIN_BASENAME` defined
+  - No `PRODUCT_ID` constant — product ID lives in settings (`stcrm_settings.freemius_product_id`), not hardcoded
+  - Activation / deactivation / uninstall hooks registered
+- [x] PSR-4 autoloader via Composer (`vendor/autoload.php`)
+- [x] Folder structure built as standard WP plugin layout (changed from plan):
+  - `includes/` — core classes + loader + activator + deactivator + i18n + encryption
+  - `includes/Database/` — `class-stcrm-database.php`
+  - `includes/Services/` — `class-stcrm-freemius-sync.php`, `class-stcrm-backfill.php`
+  - `admin/` — admin class, settings class, CSS, JS
+  - `api/` — webhook class
+  - `languages/` — POT file
+- [x] `composer.json` with `woocommerce/action-scheduler ^3.8` (bundled at 3.9.3)
+  - AS bootstrap required explicitly in `sublime-crm.php` (not auto-included via Composer autoload_files)
+  - AS availability check deferred to `plugins_loaded` priority 5 (AS initialises at priority 1)
+- [x] Plugin activates on Laragon without errors — confirmed 2026-06-22
+  - "Dependencies missing" warning resolved
+  - "Scheduled Actions" menu: AS initialises correctly (confirmed via `as_enqueue_async_action` = true). Menu does not appear under WP Tools even with EDD disabled — root cause TBD, deferred. Functionally non-blocking.
 
 ---
 
