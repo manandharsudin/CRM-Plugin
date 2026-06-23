@@ -72,30 +72,30 @@
 
 ---
 
-### 1.5 Settings Screen
+### 1.5 Settings Screen ✅ Complete (2026-06-23)
 
-- [ ] Build Settings page controller (PHP class, registers `admin_menu` + `admin_init`)
-- [ ] **Freemius tab**
-  - Product ID field
-  - API bearer token field (password input, encrypted save)
-  - Product secret key field (password input, encrypted at rest via wp_salt-derived key)
-  - Webhook URL field (read-only, auto-generated value, copy button)
-  - Connection status notice (connected / disconnected)
-  - "Run one-time backfill" button
-- [ ] **Email tab**
-  - From name field
-  - From address field
-  - Agent fallback address field
+- [x] Settings page controller — `STCRM_Settings` class; save via `admin_post_stcrm_save_settings`; nonce + capability checked on every save
+- [x] **Freemius tab**
+  - Product ID field — `sanitize_text_field` on save
+  - API bearer token (password input, blank on render, encrypts via `STCRM_Encryption` only when non-empty submitted)
+  - Product secret key (same pattern; placeholder shows "(saved — leave blank to keep)" after first save)
+  - Webhook URL — read-only, `rest_url('stcrm/v1/fs-webhook')`, Copy button (JS)
+  - Connection status — ⚠️ deferred to Phase 2 (requires Freemius API client)
+  - Run Backfill button — `wp_nonce_url()` GET link (not a nested form); shows status + last page
+  - **Bug fixed 2026-06-23:** original nested `<form>` inside settings form caused Save Changes to fire backfill instead of saving; replaced with `wp_nonce_url()` link
+- [x] **Email tab**
+  - From name, From address, Reply-To address (`sanitize_email` on address fields)
   - Notification debounce (minutes, default 10)
-  - Auto-close after (days resolved, default 7)
-  - Warning notice: "Customer emails never contain message content"
-- [ ] **Tickets & guards tab**
-  - Categories field (comma-separated, default: technical, billing, feature, presale, bug)
-  - Default priority per tier (Free → Low, Pro → Normal)
-  - Guard matrix table: Max open tickets (Free 1, Pro 5), Messages per turn (Free 3, Pro silent ceiling 10)
-- [ ] Save button with success/error notices
-- [ ] Sanitize and validate all inputs on save
-- [ ] Enqueue settings assets only on this admin page (conditional enqueuing)
+  - Warning notice: "Customer notification emails never contain message content" (added 2026-06-23)
+- [x] **Tickets & Guards tab**
+  - Auto-close after (days, default 7) — moved here from Email tab (more logical placement)
+  - Categories (textarea, `sanitize_textarea_field`; defaults to full category names)
+  - Guard matrix: `guard_free_open` (1), `guard_pro_open` (5), `guard_free_turn` (3), `guard_silent_ceiling` (10)
+  - Uninstall toggle: delete-on-uninstall checkbox (default off)
+  - Default priority per tier — ⚠️ deferred to Phase 2 (needed when ticket creation is built)
+- [x] Save button with success/error notices — `submit_button()`, `?saved=1` / `?error=` handled in `STCRM_Admin`
+- [x] All inputs sanitized on save — per-field sanitization throughout `handle_save()`
+- [x] Assets conditionally enqueued — CSS on all 3 SublimeCRM pages; JS only on settings page (verified in 1.4)
 
 ---
 
