@@ -119,15 +119,17 @@
 
 ---
 
-### 1.7 Freemius Backfill Job
+### 1.7 Freemius Backfill Job ✅ Complete (2026-06-23)
 
-- [ ] Create `Services\FreemiusBackfill` class
-- [ ] Paginate `GET /products/{product_id}/users.json` and licenses endpoint via Freemius API
-- [ ] Upsert contacts with tier/plan/expiry on each page
-- [ ] Store last completed page in `wp_options` (`crm_backfill_last_page`) for resumability
-- [ ] Trigger via "Run one-time backfill" button in Settings
-- [ ] Show basic progress in Settings (page X processed, N contacts synced) — note: full progress meter is a known design gap, add simple text status for now
-- [ ] Ensure job is idempotent — safe to run multiple times
+- [x] `STCRM_Backfill` class in `includes/Services/`
+- [x] Paginates `GET /products/{product_id}/installs.json` (changed from plan's `users.json` — installs endpoint bundles user + license + sites_count in one record; better fit than users.json which needs a second API call for license data)
+- [x] Upserts contacts via `STCRM_Database::upsert_contact()` on each page with tier/plan/expiry
+- [x] Last page stored in `stcrm_backfill_last_page` (plan said `crm_backfill_last_page` — `stcrm_` prefix correct per convention)
+- [x] Triggered via Run Backfill link in Settings → Freemius tab (GET link with `wp_nonce_url()` after nested form fix)
+- [x] Progress shown in Settings: status string (`idle` / `running` / `completed` / `error_*`) + last page number
+- [x] Idempotent — `upsert_contact()` matches on `(product_id, email)`; safe to run multiple times
+- [x] Verified in Laragon 2026-06-23: status cycles `idle → running → error_missing_credentials` correctly; AS job runs via WP-Cron on next page load; `stcrm_backfill_last_page` absent (correct — job errored before processing any pages)
+- [ ] Live API test — ⚠️ deferred: requires real Freemius credentials; `license.plan.changed` + `license.extended/shortened` handlers deferred to Phase 2 (Tier Resolution Service, 2.2)
 
 ---
 
