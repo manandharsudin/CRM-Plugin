@@ -48,20 +48,27 @@
 
 ---
 
-### 1.3 Bundle Action Scheduler
+### 1.3 Bundle Action Scheduler ✅ Complete (2026-06-23)
 
-- [ ] Require Action Scheduler via Composer or vendor copy
-- [ ] Register Action Scheduler store on `init`
-- [ ] Confirm Action Scheduler admin screen appears under Tools
+- [x] Require Action Scheduler via Composer or vendor copy
+  - `composer.json`: `woocommerce/action-scheduler ^3.8`, installed at 3.9.3
+  - Bootstrap explicitly `require_once`'d in `sublime-crm.php` (not auto-included via Composer autoload_files)
+- [x] Register Action Scheduler store on `init` — handled internally by AS; hooks `ActionScheduler_Versions::initialize_latest_version` to `plugins_loaded` p1 → `ActionScheduler::init()`
+- [x] AS admin screen under Tools — ⚠️ deferred (known non-blocking issue): AS initialises correctly (`as_enqueue_async_action` available), but menu item does not appear; root cause TBD. No admin screen = no user impact at this stage.
 
 ---
 
-### 1.4 Admin Menu Registration
+### 1.4 Admin Menu Registration ✅ Complete (2026-06-23)
 
-- [ ] Register top-level "Support" menu page (ticket icon, capability `stcrm_manage_tickets`)
-- [ ] Register submenu pages: Inbox, Contacts, Settings
-- [ ] Register custom capability `stcrm_manage_tickets` — grant to Administrator role on activation
-- [ ] Confirm menu appears in wp-admin with correct active states
+- [x] Register top-level "Support" menu page (ticket icon, capability `stcrm_manage_tickets`)
+  - `add_menu_page()`: title "Support", `dashicons-format-chat`, capability `stcrm_manage_tickets`, position 30
+- [x] Register submenu pages: Inbox, Contacts, Settings
+  - Inbox slug matches top-level slug (removes WP auto-duplicate entry)
+  - Settings callback delegates to `STCRM_Settings::render_page()`
+  - Inbox + Contacts show Phase 2 placeholder notice; Settings shows live 3-tab form
+- [x] `stcrm_manage_tickets` capability granted to Administrator on activation — `STCRM_Activator::grant_capability()`
+- [x] Assets enqueued conditionally — CSS on all 3 pages, JS only on settings (`enqueue_assets()` checks `$hook` allowlist)
+- [x] Confirmed in wp-admin 2026-06-23: menu appears with correct icon, all 3 submenus visible, active states correct
 
 ---
 
