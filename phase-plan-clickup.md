@@ -180,13 +180,23 @@
 
 ---
 
-### 2.2 Tier Resolution Service
+### 2.2 Tier Resolution Service ✅ Complete (2026-06-23)
 
-- [ ] Build `Services\TierResolver` class
-- [ ] Primary path: match submitted email (lowercased) against `wp_stcrm_contacts` for this `product_id` → active license → verified=1, tier=pro, priority=normal
-- [ ] Fallback path: if `license_key` provided → verify against Freemius API → cache result as transient (~1h per key hash) → update/link contact
-- [ ] Graceful degradation: Freemius API unreachable → accept as unverified, flag `verification_pending=1` in contact, queue re-check job
-- [ ] No match / failed verification → verified=0, tier=free, priority=low — never reject
+- [x] Build `Services\TierResolver` class
+  - `STCRM_Tier_Resolver` at `includes/Services/class-stcrm-tier-resolver.php`
+  - `resolve(int $product_id, string $email, string $license_key = '')` returns `{contact, tier, verified, priority}`
+  - Schema: added `verification_pending tinyint(1) unsigned NOT NULL DEFAULT 0` to `wp_stcrm_contacts`; bumped `STCRM_DB_VERSION` to `1.0.1`; auto-upgrade via `maybe_upgrade_db()` in `SublimeCRM` constructor
+- [x] Primary path: match submitted email (lowercased) against `wp_stcrm_contacts` for this `product_id` → active license → verified=1, tier=pro, priority=normal
+  - Single indexed query (`UNIQUE KEY product_email`); no API call
+- [x] Fallback path: if `license_key` provided → verify against Freemius API → cache result as transient (~1h per key hash) → update/link contact
+  - Step 2: hash lookup via `STCRM_Database::get_contact_by_license_key_hash()` (indexed `KEY license_key_hash`) — no API call
+  - Step 3a: transient cache check before API call (cache key = SHA-256 hash, not raw key)
+  - Step 3b: `GET /v1/products/{id}/licenses.json?secret_key={key}` via `wp_remote_get()` (15s timeout)
+  - On API success: upsert contact preserving existing name (licenses endpoint returns no name), cache result 1h
+- [x] Graceful degradation: Freemius API unreachable → accept as unverified, flag `verification_pending=1` in contact, queue re-check job
+  - Only flags pending when token IS configured (`stcrm_no_api_token` error code excluded)
+  - AS job `stcrm_reverify_contact(contact_id, product_id, email, license_key)` queued 1h out; raw key lives temporarily in AS jobs table, never in contacts table
+- [x] No match / failed verification → verified=0, tier=free, priority=low — never reject
 
 ---
 
