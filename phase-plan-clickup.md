@@ -144,13 +144,14 @@
 ---
 
 ### Phase 1 Acceptance
-- Plugin activates with zero PHP errors or warnings
-- All 4 DB tables exist with correct columns and indexes
-- Settings screen saves and retrieves all fields correctly
-- Webhook URL appears correctly in Settings
-- Freemius test event (sandbox) → contact appears/updates in `wp_stcrm_contacts`
-- Backfill job runs, paginates, creates contacts
-- Expired token purge cron is scheduled
+
+- [x] Plugin activates with zero PHP errors or warnings — verified 2026-06-23
+- [x] All 4 DB tables exist with correct columns and indexes — verified 2026-06-23 (phpMyAdmin)
+- [x] Settings screen saves and retrieves all fields correctly — verified 2026-06-23
+- [x] Webhook URL appears correctly in Settings — verified 2026-06-23
+- [ ] Freemius test event (sandbox) → contact appears/updates in `wp_stcrm_contacts` — ⚠️ pending real Freemius credentials (code complete)
+- [ ] Backfill job runs, paginates, creates contacts — ⚠️ pending real Freemius credentials (flow verified; status cycles correctly)
+- [x] Expired token purge cron is scheduled — verified 2026-06-23 (wp_options.cron confirmed)
 
 ---
 
