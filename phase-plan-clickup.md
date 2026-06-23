@@ -133,11 +133,13 @@
 
 ---
 
-### 1.8 Maintenance Cron Jobs
+### 1.8 Maintenance Cron Jobs ✅ Complete (2026-06-23)
 
-- [ ] Register daily cron event to purge expired `wp_stcrm_tokens` rows (`expires_at < NOW()`)
-- [ ] Register daily cron event for auto-close (tickets with `resolved_at` older than auto-close setting → set status `closed`, insert `system` message)
-- [ ] Verify crons are registered on activation
+- [x] Daily cron: `stcrm_purge_expired_tokens` → `SublimeCRM::purge_expired_tokens()` — `DELETE WHERE expires_at < NOW()`
+- [x] Daily cron: `stcrm_auto_close_tickets` → `SublimeCRM::auto_close_tickets()` — reads `auto_close_days` from settings, batches 100, inserts `system` message per closed ticket
+- [x] Scheduled on activation — `STCRM_Activator::schedule_events()` with `wp_next_scheduled()` guard (no duplicate scheduling)
+- [x] Unscheduled on deactivation — `STCRM_Deactivator::clear_cron_events()` (bonus: not in original plan)
+- [x] Verified in Laragon 2026-06-23 — both hooks present in `wp_options.cron` with `schedule: daily`, `interval: 86400`
 
 ---
 
