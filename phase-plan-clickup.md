@@ -161,13 +161,22 @@
 
 ---
 
-### 2.1 REST API Infrastructure
+### 2.1 REST API Infrastructure ✅ Complete (2026-06-23)
 
-- [ ] Register namespace `stcrm/v1` with `register_rest_route` calls in a `RestApi\Router` class
-- [ ] Build session auth middleware: read session cookie → hash → look up `wp_stcrm_tokens` (type=session, not expired) → attach contact to request
-- [ ] Build nonce + capability middleware for admin routes
-- [ ] Build Freemius webhook middleware (already done in Phase 1 — confirm reuse)
-- [ ] Centralise error response helper (WP_Error shape: `{code, message, data: {status}}`)
+- [x] Register namespace `stcrm/v1` with `register_rest_route` calls in a `RestApi\Router` class
+  - `STCRM_Router` created at `api/class-stcrm-router.php`; delegates to each controller's `register_routes()` from a single `rest_api_init` hook
+  - `SublimeCRM::define_api_hooks()` now instantiates `STCRM_Router` instead of `STCRM_Webhook` directly
+  - Namespace verified: `GET /wp-json/stcrm/v1/` returns routes list including `/stcrm/v1/fs-webhook`
+- [x] Build session auth middleware: read session cookie → hash → look up `wp_stcrm_tokens` (type=session, not expired) → attach contact to request
+  - `STCRM_Session_Auth::authenticate()` at `api/class-stcrm-session-auth.php`
+  - Single JOIN query (tokens ⟵JOIN⟶ contacts) instead of two separate queries — halves DB load on every portal poll
+  - Returns `true|WP_Error`; attaches `_stcrm_contact` + `_stcrm_token` objects to request params
+- [x] Build nonce + capability middleware for admin routes
+  - `STCRM_Session_Auth::authenticate_admin()` — checks `is_user_logged_in()` then `current_user_can('stcrm_manage_tickets')`; WP core handles REST nonce automatically
+- [x] Build Freemius webhook middleware (already done in Phase 1 — confirm reuse)
+  - `STCRM_Webhook` unchanged; `STCRM_Router` calls `(new STCRM_Webhook())->register_routes()` ✅
+- [x] Centralise error response helper (WP_Error shape: `{code, message, data: {status}}`)
+  - `STCRM_Rest_Helper::error()` + `STCRM_Rest_Helper::success()` at `api/class-stcrm-rest-helper.php`
 
 ---
 
