@@ -99,21 +99,23 @@
 
 ---
 
-### 1.6 Freemius Webhook Receiver
+### 1.6 Freemius Webhook Receiver ✅ Complete (2026-06-23)
 
-- [ ] Register REST route: `POST /stcrm/v1/fs-webhook` (public, no auth)
-- [ ] Validate HMAC SHA-256 signature: `hash_hmac('sha256', raw_body, secret_key)` vs `x-signature` header using `hash_equals()`. Mismatch → 401, log error.
-- [ ] Respond 200 immediately; queue actual processing via Action Scheduler (so Freemius never times out)
-- [ ] Write idempotent event handlers (upserts keyed on Freemius IDs):
-  - `license.created` / `payment.created` → upsert contact: tier=pro, license_status=active, plan, expiry, fs IDs
-  - `license.plan.changed` → update plan on contact
-  - `license.extended` / `license.shortened` → update `license_expires`
-  - `license.expired` → license_status=expired, tier=free
-  - `license.cancelled` / `subscription.cancelled` / `license.deleted` → license_status=cancelled, tier=free
-  - `user.updated` → refresh name/email
-  - All other events → acknowledge and ignore
-- [ ] Tier downgrades must NOT delete contacts or tickets — only update guard tier
-- [ ] Test with Freemius sandbox event in staging
+- [x] Register `POST /stcrm/v1/fs-webhook` — `permission_callback => '__return_true'`; auth via HMAC only
+- [x] HMAC SHA-256 validation: `base64_encode(hash_hmac('sha256', $raw_body, $secret_key, true))` vs `x-signature` header; `hash_equals()` constant-time comparison; mismatch → 401
+- [x] Respond 200 immediately; queue via `as_enqueue_async_action('stcrm_process_webhook_event', ...)` before returning
+- [x] Idempotent event handlers (upserts keyed on product_id + email):
+  - `install.installed` → free or pro based on license presence in payload
+  - `install.upgraded` → tier=pro, active
+  - `install.downgraded` / `install.cancelled` → tier=free
+  - `license.expired` → targeted update: tier=free, license_status=expired (added 2026-06-23)
+  - `license.cancelled` / `subscription.cancelled` → targeted update: tier=free, license_status=cancelled (added 2026-06-23)
+  - `user.updated` → refresh name/email only
+  - All other events → silently ignored (logged at info if WP_DEBUG)
+  - Note: `license.*` events use targeted DB update preserving `sites_count`; fall back to full upsert if contact not yet in DB
+  - Deferred: `license.plan.changed`, `license.extended/shortened` (need Freemius API client — Phase 2)
+- [x] Tier downgrades never delete contacts or tickets — all paths use upsert or targeted update
+- [ ] Sandbox test — ⚠️ deferred: requires real Freemius credentials in Settings; test when credentials configured
 
 ---
 
