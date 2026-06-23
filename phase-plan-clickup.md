@@ -32,17 +32,19 @@
 
 ---
 
-### 1.2 Database — Tables & Migrations
+### 1.2 Database — Tables & Migrations ✅ Complete (2026-06-23)
 
-- [ ] Create `Database\Installer` class using `dbDelta()`
-  - `wp_stcrm_contacts` table (all columns + indexes per spec §3.1)
-  - `wp_stcrm_tickets` table (all columns + indexes per spec §3.2)
-  - `wp_stcrm_messages` table (all columns + indexes per spec §3.3)
-  - `wp_stcrm_tokens` table (all columns + indexes per spec §3.4)
-- [ ] Store schema version in `wp_options` (`crm_db_version`)
-- [ ] Write upgrade routine — check stored version vs current, run delta migrations
-- [ ] Run installer on plugin activation hook
-- [ ] Verify all 4 tables created correctly in Laragon database
+- [x] Create `Database\Installer` class using `dbDelta()`
+  - Class is `STCRM_Database` (standard WP naming, not namespaced `Database\Installer`)
+  - `wp_stcrm_contacts` table — 13 columns including `license_key_hash VARCHAR(64)`, `created_at`, `updated_at`; indexes on `tier`, `fs_user_id`, `license_key_hash`; UNIQUE `(product_id, email)`
+  - `wp_stcrm_tickets` table — all columns per spec; indexes on `contact_id`, `(product_id,status)`, `(status,last_activity_at)`, `assigned_to`
+  - `wp_stcrm_messages` table — immutable; indexes on `(ticket_id,created_at)`, `sender_type`
+  - `wp_stcrm_tokens` table — `token_hash CHAR(64)` UNIQUE; indexes on `contact_id`, `expires_at`
+- [x] Store schema version in `wp_options` (`stcrm_db_version` — note: plan said `crm_db_version` but `stcrm_` prefix is correct per plugin convention)
+- [x] Upgrade routine — `version_compare($installed, STCRM_DB_VERSION, '>=')` guard; dbDelta handles incremental column additions (standard WP approach)
+- [x] Installer called on activation — `STCRM_Activator::activate()` calls `STCRM_Database::install()`
+- [x] All 4 tables verified in Laragon DB — confirmed via phpMyAdmin 2026-06-23; `stcrm_db_version = 1.0.0` in `wp_options`
+  - Phase 1 bonus: `upsert_contact()`, `get_contact_by_email()`, `get_contact_by_fs_user_id()` helpers also implemented
 
 ---
 
