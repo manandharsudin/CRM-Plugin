@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-22
+> Last updated: 2026-06-24
 
 ---
 
@@ -137,12 +137,14 @@ Registered via `get_block_templates` filter. The block itself is **zero changes*
 | name | VARCHAR(190) NULL | |
 | tier | ENUM('free','pro') | Drives guard matrix |
 | plan | VARCHAR(100) NULL | Freemius plan title |
+| license_key_hash | VARCHAR(64) NULL | SHA-256(raw_license_key) — for fallback verification at ticket creation |
+| verification_pending | TINYINT(1) UNSIGNED | 1 = Freemius API unreachable at ticket creation; stcrm_reverify_contact AS job queued |
 | license_status | ENUM('none','active','expired','cancelled') | |
 | license_expires | DATETIME NULL | |
 | sites_count | SMALLINT UNSIGNED | |
 | created_at / updated_at | DATETIME | |
 
-Indexes: `UNIQUE (product_id, email)`, `UNIQUE (product_id, fs_user_id)`, `INDEX (tier)`
+Indexes: `UNIQUE (product_id, email)`, `UNIQUE (product_id, fs_user_id)`, `INDEX (tier)`, `INDEX (license_key_hash)`
 
 ### `wp_stcrm_tickets`
 | Column | Type | Notes |
@@ -463,10 +465,10 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 
 ## 17. Build Phases
 
-| Phase | Contents | Done when |
-|---|---|---|
-| 1 — Foundation | Tables + migrations (dbDelta + schema version), Action Scheduler, settings screen, webhook receiver + HMAC validation, backfill job | Existing Freemius customers appear as contacts; test purchase/cancel updates tier within seconds |
-| 2 — Tickets core | REST API (public + admin routes), guard matrix, admin inbox + thread UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
+| Phase | Status | Contents | Done when |
+|---|---|---|---|
+| 1 — Foundation | ✅ Complete (2026-06-22) | Tables + migrations (dbDelta + schema version), Action Scheduler, settings screen, webhook receiver + HMAC validation, backfill job | Existing Freemius customers appear as contacts; test purchase/cancel updates tier within seconds |
+| 2 — Tickets core | 🔄 In Progress (2026-06-24) — 2.1–2.4 complete, 2.5–2.10 pending | REST API (public + admin routes), guard matrix, admin inbox + thread UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
 | 3 — Touchpoints | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
 | 4 — Notifications & hardening | Email queue + templates + debounce, auto-close cron, rate limits, security pass, uninstall | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 
