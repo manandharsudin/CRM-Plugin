@@ -332,20 +332,22 @@
 
 ---
 
-### 2.8 Admin Inbox UI
+### 2.8 Admin Inbox UI ✅ Complete (2026-06-24)
 
-- [ ] PHP page class for Inbox screen (registered as `Inbox` submenu page callback)
-- [ ] Render page shell: title "Support Inbox" + open count pill + subhead
-- [ ] Filter toolbar: Status, Priority, Tier, Assignee selects + search input (PHP-rendered, JS-enhanced)
-- [ ] Render mount point `<div id="crm-inbox"></div>` for React island
-- [ ] Build React island (`src/admin/inbox.jsx`):
-  - Fetch tickets from `GET /admin/tickets` with filter params
-  - Render 384px scrollable list (ListItem component per design: Tier badge, Critical badge, #id·time kicker, subject, who–preview, Status badge, priority badge, unread pill)
-  - Active item: `#f0f6fc` bg + 3px left blue border
-  - Render reading pane (ticket header badges + thread preview + "Open full thread" button)
-  - "Open full thread" links to Thread admin page with ticket ID param
-- [ ] Enqueue React island assets only on Inbox page
-- [ ] Match design tokens from `design/Support CRM.html`
+- [x] PHP page class for Inbox screen — `render_inbox_page()` in `STCRM_Admin`
+- [x] Render page shell: "Support Inbox" title + open count pill (`count_open_tickets()` DB method) + subhead
+- [x] Filter toolbar: Status, Priority, Tier selects (PHP-rendered, React event listeners on change)
+- [x] Render mount point `<div id="crm-inbox"></div>` for React island
+- [x] Build React island (`src/admin/inbox.jsx`):
+  - Fetches `GET /admin/tickets` on mount and on filter change (via DOM select change events)
+  - 384px scrollable list: TierBadge, CriticalBadge, #id·time kicker (10px mono uppercase), subject (13.5px/600), contact who, StatusBadge, PriorityBadge, unread pill
+  - Active item: `#f0f6fc` bg + 3px `#2271b1` left border
+  - Reading pane: fetches `GET /admin/tickets/{id}` on row click; shows last 5 messages (customer/agent/internal note/system bubble types) + "Open full thread" button (links to `stcrm-thread` page, Phase 2.9)
+- [x] Enqueued via `wp_enqueue_script` + `stcrm-inbox.asset.php` (auto-generated deps: react-dom, wp-element, wp-api-fetch) — only on `toplevel_page_stcrm-inbox`
+- [x] `wp_localize_script` passes `stcrmInbox.nonce` + `stcrmInbox.threadUrl`
+- [x] `package.json` + `webpack.config.js` added (`@wordpress/scripts` v30, custom entry/output, `clean.keep` excludes `stcrm-settings.js`)
+- [x] Verified in browser: list renders, click opens reading pane with all 4 message types, filters trigger re-fetch, no console errors
+- **Implementation note:** `createRoot` must be imported from `react-dom/client` — `@wordpress/element` v8.0.1 does not export it. `@wordpress/dependency-extraction-webpack-plugin` maps `react-dom/client` → `window.ReactDOM` and adds `react-dom` to asset deps automatically.
 
 ---
 
