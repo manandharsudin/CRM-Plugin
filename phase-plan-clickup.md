@@ -280,20 +280,29 @@
 
 ---
 
-### 2.6 Magic-Link Auth Endpoints
+### 2.6 Magic-Link Auth Endpoints ✅
 
-- [ ] `POST /stcrm/v1/auth/magic-link`
+- [x] `POST /stcrm/v1/auth/magic-link`
   - Rate limit: 3/hour/email
   - **Always return 200** with "If that address has tickets, a sign-in link is on its way." (no account enumeration)
-  - On email match: generate `random_bytes(32)` → URL-safe base64 raw token → store SHA-256 hash in `wp_stcrm_tokens` (type=magic_link, expires 48h)
+  - On email match: generate `random_bytes(29)` → `'stc_'` prefix + URL-safe base64 raw token → store SHA-256 hash in `wp_stcrm_tokens` (type=magic_link, expires 48h)
   - Queue magic-link email (Phase 4)
-- [ ] Magic-link redemption handler (WordPress `template_redirect` action, not REST)
+- [x] Magic-link redemption handler (WordPress `template_redirect` action, not REST)
   - Read `?t=` param → SHA-256 hash → look up token (unused + not expired)
   - Mark `used_at = NOW()`
   - Generate new session token → store hash (type=session, expires 30 days)
   - Set HttpOnly, Secure, SameSite=Lax cookie with raw session token
   - Redirect to ticket thread (if `ticket_id` set on token) or portal home
   - Invalid/expired → redirect to expired-link view
+
+**Implementation notes (2026-06-24):**
+- `STCRM_Auth_Controller`: REST route + `template_redirect` handler wired in `class-sublime-crm.php`
+- Token format: `'stc_'` prefix + URL-safe base64(random_bytes(29)) = 43 chars — prefix prevents foreign `?t=` params from being intercepted
+- Redemption is atomic: `consume_magic_link_token()` does a single `UPDATE WHERE used_at IS NULL` and checks `$wpdb->rows_affected = 1` — eliminates TOCTOU race
+- Session `insert_token()` return checked before cookie is set; orphaned cookie prevented
+- `secure` cookie flag set to `true` unconditionally (was `is_ssl()`)
+- Phase 4 stub in `request_magic_link()` passes `$token_id` (not `$raw_token`) to guard against AS storing plaintext token
+- Redirect targets stubbed with `home_url('/')` + Phase 3 comments; portal URLs wired in Phase 3
 
 ---
 
