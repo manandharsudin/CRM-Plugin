@@ -342,7 +342,7 @@
   - Fetches `GET /admin/tickets` on mount and on filter change (via DOM select change events)
   - 384px scrollable list: TierBadge, CriticalBadge, #id·time kicker (10px mono uppercase), subject (13.5px/600), contact who, StatusBadge, PriorityBadge, unread pill
   - Active item: `#f0f6fc` bg + 3px `#2271b1` left border
-  - Reading pane: fetches `GET /admin/tickets/{id}` on row click; shows last 5 messages (customer/agent/internal note/system bubble types) + "Open full thread" button (links to `stcrm-thread` page, Phase 2.9)
+  - Reading pane: fetches `GET /admin/tickets/{id}` on row click; shows all messages (customer/agent/internal note/system bubble types) + "Open full thread" button (links to `stcrm-thread` page). Originally showed last 5 — changed to all messages in 2.9 to match full thread.
 - [x] Enqueued via `wp_enqueue_script` + `stcrm-inbox.asset.php` (auto-generated deps: react-dom, wp-element, wp-api-fetch) — only on `toplevel_page_stcrm-inbox`
 - [x] `wp_localize_script` passes `stcrmInbox.nonce` + `stcrmInbox.threadUrl`
 - [x] `package.json` + `webpack.config.js` added (`@wordpress/scripts` v30, custom entry/output, `clean.keep` excludes `stcrm-settings.js`)
@@ -351,21 +351,27 @@
 
 ---
 
-### 2.9 Admin Thread UI
+### 2.9 Admin Thread UI ✅ Complete (2026-06-24)
 
-- [ ] PHP page class for Thread screen (registered as `Thread` submenu page, reads `?ticket=id` param)
-- [ ] Render page shell: back-to-inbox button + "Ticket #id" kicker + subject as page title
-- [ ] Render mount point `<div id="crm-thread"></div>` for React island
-- [ ] Build React island (`src/admin/thread.jsx`):
+- [x] PHP page class for Thread screen (registered as `Thread` submenu page, reads `?id=N` param)
+- [x] Render page shell: back-to-inbox button + "Ticket #id" kicker + subject as page title
+- [x] Render mount point `<div id="crm-thread"></div>` for React island
+- [x] Build React island (`src/admin/thread.jsx`):
   - Fetch ticket + messages from `GET /admin/tickets/{id}`
   - Render chat thread (customer left/grey, agent right/blue, internal note full-width/amber, system messages as hairline divider)
-  - Render composer with two tabs: "Reply to customer" (white) / "Internal note" (amber `--amber-note` bg). Tab switch recolors composer bg + textarea border (0.15s transition)
-  - Reply mode helper text: "Customer gets a link-only email" + "Notification queued via Action Scheduler"
+  - Render composer with two tabs: "Reply to customer" (white) / "Internal note" (amber `--amber-note` bg)
+  - Reply mode helper text: "Customer gets a link-only email · Ctrl+Enter to send"
   - Note mode helper text: "Not emailed · agents only"
-  - Send/Save actions call appropriate admin message endpoint
-  - Render 300px sidebar: Customer panel (Freemius read-only data), Environment panel (env JSON fields), Manage panel (status/priority/assignee selects + Resolve/Close buttons)
-  - Manage panel actions call `PATCH /admin/tickets/{id}`
-- [ ] Enqueue React island assets only on Thread page
+  - Ctrl+Enter shortcut to send; POST to `/admin/tickets/{id}/messages`
+  - 300px sidebar: Customer panel (Freemius read-only data), Environment panel (env JSON fields — hidden if ticket.env is null), Manage panel (status/priority selects + Save changes + Resolve/Close buttons)
+  - Manage panel: `PATCH /admin/tickets/{id}`; status/priority updated in local state on success
+  - Auto-scroll to bottom on initial thread load
+- [x] Enqueue React island assets only on `support_page_stcrm-thread`; `wp_localize_script` passes `ticketId`, `nonce`, `inboxUrl`
+- [x] webpack.config.js: stcrm-thread added as second entry alongside stcrm-inbox
+- [x] Inbox reading pane fix: removed `slice(-5)` — reading pane now shows all messages (full thread matches reading pane)
+- [x] Verified in browser: full thread loads, Reply tab sends message and updates status, Internal note saved without status change, Manage panel patches correctly, all 4 bubble types render
+- **Implementation note:** `remove_submenu_page('stcrm-inbox', 'stcrm-thread')` must NOT be called — WordPress's `user_can_access_admin_page()` iterates `$submenu` for capability checks; removing the item causes 403 even for users with the capability. Thread item left in nav.
+- Plugin commits: `ad06dad` (Thread UI + inbox fix) + `da161c6` (CLAUDE.md)
 
 ---
 
