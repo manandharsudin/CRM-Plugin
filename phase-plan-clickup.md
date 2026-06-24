@@ -223,13 +223,20 @@
 
 ---
 
-### 2.4 Rate Limiting
+### 2.4 Rate Limiting ✅ Complete (2026-06-24)
 
-- [ ] Build `Services\RateLimiter` using WordPress transients
-- [ ] Ticket creation: 5/hour/IP + 3/day/email (unverified); 20/day/email (verified)
-- [ ] Messages: 30/day/contact (unverified)
-- [ ] Magic-link requests: 3/hour/email
-- [ ] All limits return 429 with `Retry-After` header on exceed
+- [x] Build `Services\RateLimiter` using WordPress transients
+  - `STCRM_Rate_Limiter` at `includes/Services/class-stcrm-rate-limiter.php`; loaded in `SublimeCRM::load_dependencies()`
+  - Transient stored as `{count, reset_at}` so Retry-After reflects actual window remainder, not full window
+- [x] Ticket creation: 5/hour/IP + 3/day/email (unverified); 20/day/email (verified)
+  - Split into two calls: `check_ticket_ip($ip)` before validation; `check_ticket_email($email, $verified)` after tier resolution (when verification status is known)
+  - Both share the same email transient key so counts accumulate across tier changes
+- [x] Messages: 30/day/contact (unverified)
+  - `check_message($contact_id, $verified)` — returns true immediately for verified contacts (no limit per spec)
+- [x] Magic-link requests: 3/hour/email
+  - `check_magic_link($email)` returns `bool` (not WP_REST_Response) — endpoint always returns HTTP 200 regardless; bool controls whether email is queued
+- [x] All limits return 429 with `Retry-After` header on exceed
+  - Returns `WP_REST_Response` (not `WP_Error`) so the `Retry-After` header can be attached — WP_Error cannot carry response headers
 
 ---
 
