@@ -240,9 +240,9 @@
 
 ---
 
-### 2.5 Public Ticket Endpoints
+### 2.5 Public Ticket Endpoints ✅
 
-- [ ] `POST /stcrm/v1/tickets`
+- [x] `POST /stcrm/v1/tickets`
   - Honeypot check: `hp_field` non-empty → silent fake 201, nothing stored
   - Rate limit check
   - Validate + sanitize: subject ≤255 chars, message ≤20,000 chars, valid email
@@ -252,15 +252,15 @@
   - Insert ticket (status: awaiting_agent) + first message
   - Queue confirmation email + agent alert (Phase 4)
   - Return 201: `{ticket_id, status, verified, thread_url}`
-- [ ] `GET /stcrm/v1/tickets` (session auth)
+- [x] `GET /stcrm/v1/tickets` (session auth)
   - Return authenticated contact's tickets: `[{id, subject, status, priority, last_activity_at, unread_count}]`
   - Pagination: `page` / `per_page` (max 50)
-- [ ] `GET /stcrm/v1/tickets/{id}` (session auth)
+- [x] `GET /stcrm/v1/tickets/{id}` (session auth)
   - Ownership check: ticket.contact_id must match session contact
   - Return ticket header + messages (is_internal_note=1 rows excluded at query level)
   - Return `composer: {locked, reason, notice}` — compute from guard check
   - Mark unread agent messages as `read_at = NOW()`
-- [ ] `POST /stcrm/v1/tickets/{id}/messages` (session auth)
+- [x] `POST /stcrm/v1/tickets/{id}/messages` (session auth)
   - Ownership check
   - Ticket must not be `closed` (replying to `resolved` → reopen to `awaiting_agent`)
   - Guard: turn limit check (§2.3)
@@ -268,6 +268,15 @@
   - Set ticket status → `awaiting_agent`
   - Queue agent notification (Phase 4)
   - Return 201 with new message
+
+**Implementation notes (2026-06-24, commit `1c09788`):**
+- `STCRM_Tickets_Controller` registers all 4 routes; wired into `STCRM_Router` + `STCRM_Loader`
+- 7 new DB methods added to `STCRM_Database`: `upsert_contact()`, `insert_ticket()`, `insert_message()`, `get_tickets_by_contact()`, `get_ticket_with_messages()`, `mark_agent_messages_read()`, `count_customer_turns_since_last_agent()`
+- `insert_message()` strips null values via `array_filter` before building `$formats` array — prevents sender_id (NULL for customers) being coerced to 0 by `%d`
+- `create_message()` runs all `update_ticket()` calls AFTER `insert_message()` succeeds — prevents status mutation on DB write failure
+- `sanitize_link_rel()` regex is `/<a([^>]*)>/i` (no leading `\s`) — bare `<a>` tags get `rel="nofollow noopener"` too
+- All 3 session-auth handlers null-guard `STCRM_Session_Auth::get_contact()` → 401 if null
+- Email queuing deferred to Phase 4 (stubs in place)
 
 ---
 
