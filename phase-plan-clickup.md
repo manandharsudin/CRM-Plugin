@@ -306,23 +306,29 @@
 
 ---
 
-### 2.7 Admin Ticket Endpoints
+### 2.7 Admin Ticket Endpoints ✅ Complete (2026-06-24)
 
-- [ ] `GET /stcrm/v1/admin/tickets` (stcrm_manage_tickets + nonce)
+- [x] `GET /stcrm/v1/admin/tickets` (stcrm_manage_tickets + nonce)
   - Filter params: status, priority, tier, assignee
   - Default sort: floats `verified=1` first, then priority (critical→high→normal→low)
   - Include internal notes in response for admin
-- [ ] `GET /stcrm/v1/admin/tickets/{id}` (stcrm_manage_tickets + nonce)
+- [x] `GET /stcrm/v1/admin/tickets/{id}` (stcrm_manage_tickets + nonce)
   - Include internal notes
   - Include full contact panel data (Freemius fields from wp_stcrm_contacts)
-- [ ] `POST /stcrm/v1/admin/tickets/{id}/messages` (stcrm_manage_tickets + nonce)
+  - Marks customer messages as read (read_at = UTC_TIMESTAMP)
+- [x] `POST /stcrm/v1/admin/tickets/{id}/messages` (stcrm_manage_tickets + nonce)
   - Accepts `{message, is_internal_note: bool}`
   - Non-note: set status → `awaiting_customer`, queue content-free customer notification (Phase 4)
   - Internal note: no status change, no customer email, never exposed via public API
-- [ ] `PATCH /stcrm/v1/admin/tickets/{id}` (stcrm_manage_tickets + nonce)
-  - Accepts status, priority, assigned_to
-  - Status changes insert a `system` message in thread
-- [ ] `GET /stcrm/v1/admin/contacts` (stcrm_manage_tickets + nonce)
+  - Agent name resolved from wp_users; returned in response
+- [x] `PATCH /stcrm/v1/admin/tickets/{id}` (stcrm_manage_tickets + nonce)
+  - Accepts status, priority, assigned_to (null = unassign)
+  - Status changes insert a `system` message in thread ("Status changed to X by Y")
+  - Setting status=resolved writes resolved_at; any other status clears it
+  - Only fields present in JSON body are updated (no-op safe)
+- [x] `GET /stcrm/v1/admin/contacts` (stcrm_manage_tickets + nonce)
+- Implementation: `api/class-stcrm-admin-controller.php` + 5 new DB methods in `class-stcrm-database.php`
+- All 10 smoke test checks passed 2026-06-24
 
 ---
 
