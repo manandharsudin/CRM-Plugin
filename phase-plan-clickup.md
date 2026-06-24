@@ -200,16 +200,26 @@
 
 ---
 
-### 2.3 Guard Matrix Service
+### 2.3 Guard Matrix Service ✅ Complete (2026-06-23, reviewed 2026-06-24)
 
-- [ ] Build `Services\GuardMatrix` class
-- [ ] Open ticket cap check: COUNT tickets WHERE contact_id = X AND status NOT IN (resolved, closed)
-  - Free: ≥1 → return 409 `stcrm_open_ticket_exists` with existing ticket id
-  - Pro: ≥5 → return 409 `stcrm_ticket_cap_reached` with soft message
-- [ ] Turn limit check: COUNT customer messages since last non-internal agent message on the ticket
-  - Free: ≥3 → return 423 `stcrm_turn_limit`
-  - Pro: ≥10 (silent ceiling, never surfaced in UI) → return 423
-- [ ] Guard matrix values read from Settings (editable, not hardcoded)
+- [x] Build `Services\GuardMatrix` class
+  - `STCRM_Guard_Matrix` at `includes/Services/class-stcrm-guard-matrix.php`; loaded in `SublimeCRM::load_dependencies()`
+- [x] Open ticket cap check: COUNT tickets WHERE contact_id = X AND status NOT IN (resolved, closed)
+  - Free: ≥1 → 409 `stcrm_open_ticket_exists` with `ticket_id` in error data (portal links to it)
+  - Pro: ≥5 → 409 `stcrm_ticket_cap_reached` with friendly message
+  - 0 in either setting = cap disabled for that tier (early return)
+  - Fetches `cap+1` rows via LIMIT to avoid `COUNT(*)` — IMPORTANT: the +1 is intentional
+- [x] Turn limit check: COUNT customer messages since last non-internal agent message on the ticket
+  - Free: ≥3 → 423 `stcrm_turn_limit` (composer locks in portal UI)
+  - Pro: silent ceiling ≥10 → 423 `stcrm_turn_limit` (UI never shows lock for pro)
+  - No agent reply yet → counts from thread start (COALESCE to 0)
+  - Single correlated subquery (atomic — no TOCTOU race)
+- [x] Guard matrix values read from Settings (editable, not hardcoded)
+  - Keys: `guard_free_open` (1), `guard_pro_open` (5), `guard_free_turn` (3), `guard_silent_ceiling` (10)
+- [x] Security/perf review (2026-06-24) — three issues fixed:
+  - DB error in `check_ticket_cap`: `get_results()` returning null now returns 500 instead of PHP TypeError
+  - DB error in `check_turn_limit`: silent pass via `(int) null = 0` eliminated; `$wpdb->last_error` checked
+  - TOCTOU race in `check_turn_limit`: two non-atomic queries collapsed into one correlated subquery
 
 ---
 
