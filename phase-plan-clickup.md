@@ -476,12 +476,17 @@
 
 ---
 
-### 3.4 Portal View: New Ticket Form
+### 3.4 Portal View: New Ticket Form ✅ Complete (2026-06-25, plugin commit TBD)
 
-- [ ] Render form fields: Email, Name (optional), Subject, Category (select — from Settings categories), Message textarea, License key (optional), "Add environment details" collapsible (Site URL, WP, PHP, Plugin), honeypot `company_url` (off-screen, `tabIndex=-1`)
-- [ ] Sidebar: "Before you post" docs card (search docs button), "★ Pro — Faster replies" blue card, privacy note
-- [ ] On submit: `POST /tickets` → handle 201 (success message + link), 409 (show cap view), 4xx validation errors
-- [ ] Match design: H1 "How can we help?", subhead with "View your tickets →" link
+- [x] Render form fields: Email, Name (optional), Subject, Category (select — from Settings categories), Message textarea, License key (optional), "Add environment details" collapsible (Site URL, WP, PHP, Plugin), honeypot `company_url` (off-screen, `tabIndex=-1`)
+- [x] Sidebar: "Before you post" docs card (search docs button), "★ Pro — Faster replies" blue card, privacy note
+- [x] On submit: `POST /tickets` → 201 → success state ("Ticket submitted!" + "View your tickets →" button); 409 `stcrm_open_ticket_exists` → navigate `?view=cap-reached&ticket=<id>`; 409 `stcrm_ticket_cap_reached` → navigate `?view=cap-reached`; 4xx → inline red error banner
+- [x] Match design: H1 "How can we help?", subhead with "View your tickets →" link
+- [x] `stcrmPortal.categories` added to render.php localization; `name` param added to POST /tickets controller (stored on new contacts)
+- [x] `admin/css/stcrm-portal.css` created; referenced via `block.json` `"style"` key — auto-enqueued by WP when block renders
+- [x] `Icon.jsx` shared SVG component created for all portal views
+- [x] CAP_REACHED routing moved above auth split — accessible from both auth states
+  > Plugin commit `9384d5e`
 
 ---
 
