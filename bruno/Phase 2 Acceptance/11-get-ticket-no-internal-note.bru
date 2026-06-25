@@ -19,15 +19,15 @@ tests {
     expect(res.status).to.equal(200);
   });
   test("no internal notes in messages", function() {
-    const messages = res.body.data.messages || [];
+    const messages = res.body.messages || [];
     const hasNote = messages.some(function(m) { return m.is_internal_note === true; });
     expect(hasNote).to.equal(false);
   });
   test("composer object present", function() {
-    expect(res.body.data.composer).to.be.an("object");
+    expect(res.body.composer).to.be.an("object");
   });
   test("composer locked after turn limit (agent replied — should now be unlocked)", function() {
     // After agent reply in request 09, turn count resets — composer should be unlocked
-    expect(res.body.data.composer.locked).to.equal(false);
+    expect(res.body.composer.locked).to.equal(false);
   });
 }

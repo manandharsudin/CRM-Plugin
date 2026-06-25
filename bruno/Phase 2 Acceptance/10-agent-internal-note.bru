@@ -31,9 +31,9 @@ tests {
     expect(res.status).to.equal(201);
   });
   test("is_internal_note is true", function() {
-    expect(res.body.data.is_internal_note).to.equal(true);
+    expect(res.body.message.is_internal_note).to.equal(true);
   });
   test("ticket status still awaiting_customer (no change for internal note)", function() {
-    expect(res.body.data.ticket_status).to.equal("awaiting_customer");
+    expect(res.body.ticket_status).to.equal("awaiting_customer");
   });
 }
