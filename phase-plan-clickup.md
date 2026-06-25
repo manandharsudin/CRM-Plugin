@@ -503,17 +503,22 @@
 
 ### 3.6 Portal View: My Tickets
 
-- [ ] Fetch `GET /tickets` on session auth
-- [ ] Header: "My tickets" + "Signed in as {email} · Sign out" + "+ New ticket"
-- [ ] Card list: each row = #id kicker + "N new reply" pill, subject (15.5px/700), Status + Priority + "Updated {time}", chevron → goes to thread view
-- [ ] Sign out: clear session cookie, redirect to new ticket form
+- [x] Fetch `GET /tickets` on session auth
+- [x] Header: "My tickets" + "Signed in as {email} · Sign out" + "+ New ticket"
+- [x] Card list: each row = #id kicker + "N new reply" pill, subject (15.5px/700), Status + Priority + "Updated {time}", chevron → goes to thread view
+- [x] Sign out: clear session cookie, redirect to new ticket form
+- [x] `GET /me` endpoint added: returns `{email, name}` for authenticated contact
+- [x] `POST /auth/signout` endpoint: marks DB token used via `mark_token_used()` + expires cookie (token cannot be replayed after signout)
+- [x] `session.js` updated: parallel-fetches `/tickets` + `/me`; session shape now `{authenticated, tickets, contact:{email,name}}`
+  > Plugin commit `b259950`
 
 ---
 
 ### 3.7 Portal View: Empty State
 
-- [ ] Show when `GET /tickets` returns empty array
-- [ ] Inbox icon (72px blue circle), "No tickets yet", helper text, "Open your first ticket" button
+- [x] Show when `GET /tickets` returns empty array
+- [x] Inbox icon (72px blue circle), "No tickets yet", helper text, "Open your first ticket" button
+  > Plugin commit `b259950`
 
 ---
 
