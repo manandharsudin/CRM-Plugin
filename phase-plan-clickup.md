@@ -422,20 +422,27 @@
 
 ---
 
-## PHASE 3 — Touchpoints
+## PHASE 3 — Touchpointse
+
 > Goal: Customers can open and manage tickets from the portal and launcher without an account. All view states work.
 > Done when a customer can open a ticket from the floating launcher with email alone, get auto-verified as pro, hit the turn limit, and resume via the emailed link.
 
 ---
 
-### 3.1 Portal Block Registration
+### 3.1 Portal Block Registration ✅ Complete (2026-06-25, plugin commit 3ffae9a)
 
-- [ ] Scaffold `sublime-crm/support-portal` block using `@wordpress/scripts`
-  - `block.json`: name, title, description, category, icon, editorScript, viewScript
-  - Editor component: static placeholder ("Support Portal — renders on the frontend")
-  - Dynamic render callback (PHP): outputs `<div id="crm-portal" data-nonce="..."></div>` + `wp_enqueue_script` for portal JS
-- [ ] Enqueue portal CSS/JS only when the block is present on the page (use `render_callback`, not global enqueue)
-- [ ] Register block on `init` hook
+- [x] Scaffold `sublime-crm/support-portal` block using `@wordpress/scripts`
+  - `block.json`: name, title, description, category=widgets, icon=format-chat, editorScript, viewScript=stcrm-portal (named handle), render=render.php
+  - Editor component: static placeholder ("Support Portal — renders on the frontend") with dashed blue border — verified in Gutenberg 2026-06-25
+  - Dynamic render callback (PHP): outputs `<div id="crm-portal" data-nonce="..."></div>` + `wp_localize_script` passes `stcrmPortal = {apiBase, nonce, productId}`
+- [x] Enqueue portal CSS/JS only when the block is present on the page — `viewScript` in block.json auto-enqueues via WP; portal JS confirmed absent on pages without block
+- [x] Register block on `init` hook via `STCRM_Blocks::register()` (new class `includes/Blocks/class-stcrm-blocks.php`)
+
+**Implementation notes (2026-06-25, commit `3ffae9a`):**
+- `viewScript: "stcrm-portal"` uses a named handle (NOT `file:`) — pre-registered by `STCRM_Blocks::register_portal_script()` so render.php can call `wp_localize_script('stcrm-portal', ...)` with a predictable handle; file-based viewScript generates an unpredictable auto-handle
+- `src/portal/index.js` is a stub — Phase 3.3 replaces it with the full portal app
+- webpack.config.js: two new entries `stcrm-portal-editor` (deps: wp-blocks, wp-element) and `stcrm-portal` → `admin/js/`
+- `define_block_hooks()` added to `SublimeCRM` constructor between `define_api_hooks()` and `define_cron_hooks()`
 
 ---
 
