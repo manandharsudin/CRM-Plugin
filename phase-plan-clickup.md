@@ -490,11 +490,14 @@
 
 ---
 
-### 3.5 Portal View: Cap Reached (409)
+### 3.5 Portal View: Cap Reached (409) ✅ Complete (2026-06-25, plugin commit TBD)
 
-- [ ] Show amber banner: "You already have an open ticket"
-- [ ] Display existing ticket card: #id + status + subject + "Go to my ticket" button
-- [ ] Footnote: softer message for pro customers
+- [x] Show amber banner: "You already have an open ticket" (free) or "You've reached your open ticket limit" (pro)
+- [x] Display existing ticket card: authenticated → `#id` + StatusBadge + subject (fetched via `GET /tickets/{id}`); unauthenticated → `#id` only (session-auth endpoint not callable)
+- [x] CTA adapts: authenticated → "Go to my ticket" (→ ThreadView); unauthenticated → "Sign in to view" (→ AuthView); pro cap → "View my tickets" / "Sign in to view your tickets"
+- [x] Footnote on free cap: "Pro customers can keep up to 5 open tickets…"
+- [x] `Badges.jsx` created: `StatusBadge`, `PriorityBadge`, `TierBadge` — shared with 3.6 + 3.8
+  > Plugin commit `7ed8d23`
 
 ---
 
