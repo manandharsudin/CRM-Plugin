@@ -554,18 +554,26 @@
 
 ---
 
-### 3.11 Floating Launcher
+### 3.11 Floating Launcher ✅ (commit `e283b12`, 2026-06-25)
 
-- [ ] Bottom-right 60px circular bubble (blue, chat icon ↔ × toggle)
-- [ ] 380px panel above bubble (radius 16px, shadow `0 20px 60px rgba(0,0,0,.28)`)
-- [ ] Panel header: gradient blue, "Support" label + "We usually reply within a few hours", close ×
+- [x] Bottom-right 60px circular bubble (blue, chat icon ↔ × toggle)
+- [x] 380px panel above bubble (radius 16px, shadow `0 20px 60px rgba(0,0,0,.28)`)
+- [x] Panel header: gradient blue, "Support" label + "We usually reply within a few hours", close ×
   - **Label: NEVER "Chat". NEVER an online/offline indicator.**
-- [ ] Load launcher on every frontend page via `wp_enqueue_scripts` (conditional: frontend only)
-- [ ] Session-aware: read session state on open (call `GET /tickets` silently)
-- [ ] **View: No session** — compact form (Email, Subject, Message) + "Send message" + "Already have a ticket? Sign in →"
-- [ ] **View: My tickets** — "+ New" button + compact ticket rows (#id, "N new" pill, subject, status). Row → open thread view
-- [ ] **View: Open thread** — back chevron + #id + subject + compact message bubbles + inline reply input + send button
-- [ ] All launcher views use the same REST endpoints as the portal (same-origin, same session cookie)
+- [x] Load launcher on every frontend page via `wp_enqueue_scripts` (conditional: frontend only)
+- [x] Session-aware: read session state on open (call `GET /tickets` silently)
+- [x] **View: No session** — compact form (Email, Subject, Message) + "Send message" + "Already have a ticket? Sign in →"
+- [x] **View: My tickets** — "+ New" button + compact ticket rows (#id, "N new" pill, subject, status). Row → open thread view
+- [x] **View: Open thread** — back chevron + #id + subject + compact message bubbles + inline reply input + send button
+- [x] All launcher views use the same REST endpoints as the portal (same-origin, same session cookie)
+
+**Implementation notes:**
+- `STCRM_Launcher` PHP class: `enqueue()` on `wp_enqueue_scripts`, `render_mount()` on `wp_footer`
+- `window.stcrmLauncher {apiBase, nonce, portalUrl}` — `portalUrl` via `post_content LIKE '%wp:sublime-crm/support-portal%'` query (NOT `_wp_page_template` meta — same pattern as auth controller)
+- `src/launcher/Launcher.jsx`: all icons self-contained (`LqIcon` component); all form styles inline (no dependency on `stcrm-portal.css` which is scoped to `#crm-portal`)
+- 15s thread polling via `setInterval` (not `createPoller` — launcher has no `document.hidden` polling complexity needed)
+- "Sign in →" navigates to `portalUrl + '?view=auth'`
+- Build: `stcrm-launcher.js` 14.2 KiB. Browser verified: bubble, panel open, no-session form all correct.
 
 ---
 
