@@ -501,7 +501,7 @@
 
 ---
 
-### 3.6 Portal View: My Tickets
+### 3.6 Portal View: My Tickets ✅ Complete (2026-06-25, plugin commit `b259950`)
 
 - [x] Fetch `GET /tickets` on session auth
 - [x] Header: "My tickets" + "Signed in as {email} · Sign out" + "+ New ticket"
@@ -510,45 +510,47 @@
 - [x] `GET /me` endpoint added: returns `{email, name}` for authenticated contact
 - [x] `POST /auth/signout` endpoint: marks DB token used via `mark_token_used()` + expires cookie (token cannot be replayed after signout)
 - [x] `session.js` updated: parallel-fetches `/tickets` + `/me`; session shape now `{authenticated, tickets, contact:{email,name}}`
-  > Plugin commit `b259950`
 
 ---
 
-### 3.7 Portal View: Empty State
+### 3.7 Portal View: Empty State ✅ Complete (2026-06-25, plugin commit `b259950`)
 
 - [x] Show when `GET /tickets` returns empty array
 - [x] Inbox icon (72px blue circle), "No tickets yet", helper text, "Open your first ticket" button
-  > Plugin commit `b259950`
 
 ---
 
-### 3.8 Portal View: Thread
+### 3.8 Portal View: Thread ✅ Complete (2026-06-25, plugin commit `0828d26`)
 
-- [ ] Render ticket header: subject (24px) + #id kicker + Status/Priority/Category badges
-- [ ] Render scrollable message thread (max-height ~340px): customer right/blue, agent left/grey
-- [ ] System message: "updates automatically — checking for replies" (mono, centered hairline)
-- [ ] 15s poll via polling manager (§3.3)
-- [ ] Mark agent messages as read on view (implicit — server handles on `GET /tickets/{id}`)
-- [ ] Composer — active state: textarea + "N of 3 replies left before an agent responds" + Send
-- [ ] Composer — locked state (423 / `composer.locked=true`): dashed card, lock icon, "Thanks — we've received your messages / You'll get an email the moment we reply."
-- [ ] Composer state sourced entirely from API `composer` object — never computed client-side
-
----
-
-### 3.9 Portal View: Auth (Magic-link)
-
-- [ ] Request state: "View your tickets", "No password needed", email field, "Email me a sign-in link" button
-- [ ] Sent state: mail icon, "Check your inbox", "If that address has tickets, a sign-in link is on its way. The link works once and expires in 48 hours." + "← Use a different email"
-- [ ] Footer note: "For your security we never confirm whether an email has an account"
-- [ ] Both states always shown (API always 200 — no branching on match)
+- [x] Render ticket header: subject (24px) + #id kicker + Status/Priority/Category badges
+- [x] Render scrollable message thread (max-height ~340px): customer messages left/grey, agent messages right/blue (`.me` row-reverse)
+- [x] System message: "updates automatically — checking for replies" (centered hairline)
+- [x] 15s poll via polling manager — `createPoller(loadThread, 15000)` with `useCallback([ticketId])` for stable reference; stops on unmount
+- [x] Mark agent messages as read on view (implicit — server handles on `GET /tickets/{id}`)
+- [x] Composer — active state: textarea + "N of M replies left before an agent responds" counter (shown when `remaining < turnLimit`); Ctrl+Enter submits; `remaining`/`turn_limit` from API `composer` object
+- [x] Composer — locked state: dashed card, lock icon; `reason='turn_limit'` → "Thanks — we've received your messages"; `reason='closed'` → "This ticket has been closed"
+- [x] Composer state sourced entirely from API `composer` object — `compute_composer()` checks closed first, returns `locked:false` for pro (silent ceiling at POST only), uses `get_turn_count()` for free
+- [x] `count_consecutive_messages()` extracted to private method on `STCRM_Guard_Matrix`; `get_turn_count()` added as public method returning `{consecutive, limit, remaining}`
+- [x] POST reply uses `message` key (not `body`) — matches `create_message()` `get_param('message')`
+- [x] Auto-scroll only on new message count increase (via `prevCountRef`)
 
 ---
 
-### 3.10 Portal View: Expired Link
+### 3.9 Portal View: Auth (Magic-link) ✅ Complete (2026-06-25, plugin commit `429f012`)
 
-- [ ] Triggered when magic-link redemption fails (invalid/used/expired token)
-- [ ] Amber hourglass icon, "This link has expired", helper text
-- [ ] Email field + "Send a new link" → calls `POST /auth/magic-link`
+- [x] Request state: "View your tickets", "No password needed", email field, "Email me a sign-in link" button
+- [x] Sent state: mail icon, "Check your inbox", "If that address has tickets, a sign-in link is on its way. The link works once and expires in 48 hours." + "← Use a different email"
+- [x] Footer note: "For your security we never confirm whether an email has an account"
+- [x] Both states always shown (API always 200 — no branching on match)
+- [x] `handle_redemption()` redirect URLs fixed: valid+ticket → `?view=thread&ticket=N`, valid no-ticket → `?view=my-tickets`, expired/invalid → `?view=expired`; `get_portal_url()` queries `post_content LIKE '%wp:sublime-crm/support-portal%'` (portal page uses block in content, NOT `_wp_page_template` meta)
+
+---
+
+### 3.10 Portal View: Expired Link ✅ Complete (2026-06-25, plugin commit `429f012`)
+
+- [x] Triggered when magic-link redemption fails (invalid/used/expired token) — `handle_redemption()` redirects to `?view=expired`
+- [x] Amber hourglass icon (#fff3cd bg, #856404 text), "This link has expired", helper text
+- [x] Email field + "Send a new link" → calls `POST /auth/magic-link` → transitions to "Check your inbox" state
 
 ---
 
