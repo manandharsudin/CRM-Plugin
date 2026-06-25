@@ -1,0 +1,39 @@
+meta {
+  name: 01 Create ticket — expect 201
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{testEmail}}",
+    "name": "QA Test User",
+    "subject": "Phase 2 acceptance test",
+    "message": "This is the first message from the test user.",
+    "hp_field": ""
+  }
+}
+
+script:post-response {
+  if (res.status === 201 && res.body.data) {
+    bru.setVar("ticketId", res.body.data.ticket_id);
+  }
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("ticket_id returned", function() {
+    expect(res.body.data.ticket_id).to.be.a("number");
+  });
+  test("status is awaiting_agent", function() {
+    expect(res.body.data.status).to.equal("awaiting_agent");
+  });
+}

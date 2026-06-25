@@ -1,0 +1,23 @@
+meta {
+  name: 03 Magic-link existing email — always 200
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/auth/magic-link
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{testEmail}}"
+  }
+}
+
+tests {
+  test("status is 200 for matching email (anti-enumeration)", function() {
+    expect(res.status).to.equal(200);
+  });
+}

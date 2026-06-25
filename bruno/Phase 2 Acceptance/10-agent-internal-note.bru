@@ -1,0 +1,39 @@
+meta {
+  name: 10 Agent internal note — status unchanged
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/admin/tickets/{{ticketId}}/messages
+  body: json
+  auth: basic
+}
+
+auth:basic {
+  username: {{adminUser}}
+  password: {{adminAppPassword}}
+}
+
+headers {
+  X-WP-Nonce: {{nonce}}
+}
+
+body:json {
+  {
+    "message": "Internal note: customer seems frustrated — prioritise this one.",
+    "is_internal_note": true
+  }
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("is_internal_note is true", function() {
+    expect(res.body.data.is_internal_note).to.equal(true);
+  });
+  test("ticket status still awaiting_customer (no change for internal note)", function() {
+    expect(res.body.data.ticket_status).to.equal("awaiting_customer");
+  });
+}

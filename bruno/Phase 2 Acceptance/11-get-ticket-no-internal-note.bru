@@ -1,0 +1,33 @@
+meta {
+  name: 11 GET ticket (session) — internal note must not appear
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets/{{ticketId}}
+  body: none
+  auth: none
+}
+
+headers {
+  Cookie: stcrm_session={{sessionCookie}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.status).to.equal(200);
+  });
+  test("no internal notes in messages", function() {
+    const messages = res.body.data.messages || [];
+    const hasNote = messages.some(function(m) { return m.is_internal_note === true; });
+    expect(hasNote).to.equal(false);
+  });
+  test("composer object present", function() {
+    expect(res.body.data.composer).to.be.an("object");
+  });
+  test("composer locked after turn limit (agent replied — should now be unlocked)", function() {
+    // After agent reply in request 09, turn count resets — composer should be unlocked
+    expect(res.body.data.composer.locked).to.equal(false);
+  });
+}

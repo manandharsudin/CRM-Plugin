@@ -1,0 +1,30 @@
+meta {
+  name: 08 Customer message 4 — expect 423 turn limit
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets/{{ticketId}}/messages
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: stcrm_session={{sessionCookie}}
+}
+
+body:json {
+  {
+    "message": "Customer reply 4 — this should be blocked by turn limit."
+  }
+}
+
+tests {
+  test("status is 423 (turn limit reached)", function() {
+    expect(res.status).to.equal(423);
+  });
+  test("error code is stcrm_turn_limit", function() {
+    expect(res.body.code).to.equal("stcrm_turn_limit");
+  });
+}

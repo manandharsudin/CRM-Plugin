@@ -1,0 +1,39 @@
+meta {
+  name: 09 Agent public reply — expect awaiting_customer
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/admin/tickets/{{ticketId}}/messages
+  body: json
+  auth: basic
+}
+
+auth:basic {
+  username: {{adminUser}}
+  password: {{adminAppPassword}}
+}
+
+headers {
+  X-WP-Nonce: {{nonce}}
+}
+
+body:json {
+  {
+    "message": "Thanks for reaching out. We are looking into this.",
+    "is_internal_note": false
+  }
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+  test("ticket status is now awaiting_customer", function() {
+    expect(res.body.data.ticket_status).to.equal("awaiting_customer");
+  });
+  test("is_internal_note is false", function() {
+    expect(res.body.data.is_internal_note).to.equal(false);
+  });
+}

@@ -1,0 +1,27 @@
+meta {
+  name: 06 Customer message 2 (session auth)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets/{{ticketId}}/messages
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: stcrm_session={{sessionCookie}}
+}
+
+body:json {
+  {
+    "message": "Customer reply 2 — still waiting."
+  }
+}
+
+tests {
+  test("status is 201", function() {
+    expect(res.status).to.equal(201);
+  });
+}

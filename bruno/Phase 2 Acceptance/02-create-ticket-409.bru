@@ -1,0 +1,33 @@
+meta {
+  name: 02 Create ticket again — expect 409
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{testEmail}}",
+    "name": "QA Test User",
+    "subject": "Second ticket attempt",
+    "message": "This should be blocked — free tier already has an open ticket.",
+    "hp_field": ""
+  }
+}
+
+tests {
+  test("status is 409", function() {
+    expect(res.status).to.equal(409);
+  });
+  test("error code is stcrm_open_ticket_exists", function() {
+    expect(res.body.code).to.equal("stcrm_open_ticket_exists");
+  });
+  test("existing ticket_id returned in data", function() {
+    expect(res.body.data.ticket_id).to.be.a("number");
+  });
+}

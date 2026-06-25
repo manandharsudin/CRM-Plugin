@@ -1,0 +1,23 @@
+meta {
+  name: 04 Magic-link unknown email — still 200
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/auth/magic-link
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "nobody@does-not-exist-404.test"
+  }
+}
+
+tests {
+  test("status is 200 even for nonexistent email", function() {
+    expect(res.status).to.equal(200);
+  });
+}

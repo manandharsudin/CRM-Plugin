@@ -1,0 +1,27 @@
+meta {
+  name: 07 Customer message 3 (session auth)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/wp-json/stcrm/v1/tickets/{{ticketId}}/messages
+  body: json
+  auth: none
+}
+
+headers {
+  Cookie: stcrm_session={{sessionCookie}}
+}
+
+body:json {
+  {
+    "message": "Customer reply 3 — this is the last one before the limit."
+  }
+}
+
+tests {
+  test("status is 201 (third message, still allowed)", function() {
+    expect(res.status).to.equal(201);
+  });
+}
