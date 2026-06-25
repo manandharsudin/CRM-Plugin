@@ -461,14 +461,18 @@
 
 ---
 
-### 3.3 Portal JS App Infrastructure
+### 3.3 Portal JS App Infrastructure ✅ Complete (2026-06-25, plugin commit 3e6d9ba)
 
-- [ ] Build portal JS app (`src/portal/index.js`) — vanilla JS or lightweight React
-- [ ] View state router: reads URL params (`?view=`, `?ticket=`, `?t=`) to determine active view
-- [ ] Session detection: checks for valid session cookie via `GET /tickets` (200 = authenticated, 401 = no session)
-- [ ] Navigation helpers: push/replace URL state without full page reload
-- [ ] Loading + error states (skeleton or spinner)
-- [ ] Polling manager: `setInterval` 15s, pauses on `document.hidden` (`visibilitychange` event), resumes on visibility restore
+- [x] Build portal JS app (`src/portal/index.js`) — React via `createRoot` (from `react-dom/client`; `@wordpress/element` v8.0.1 does not export it)
+- [x] View state router (`router.js`): `VIEWS` enum, `getView()` / `getTicketId()` read URL params, `navigate()` / `replace()` push/replace via `history.pushState` + dispatch `stcrm:navigate` custom event (pushState does not fire `popstate`)
+- [x] Session detection (`session.js`): `detectSession()` calls `GET /stcrm/v1/tickets` — 200 → `{authenticated: true, tickets}`, 401/403 → `{authenticated: false}`, other errors propagate to App error state
+- [x] Navigation helpers: `navigate(view, params)` + `replace(view, params)` — App listens to both `popstate` and `stcrm:navigate`
+- [x] Loading + error states: CSS `@keyframes stcrm-spin` spinner while session detection runs; `<ErrorState>` on unrecoverable errors
+- [x] Polling manager (`polling.js`): `createPoller(callback, 15000)` — skips ticks when `document.hidden`, immediate callback on `visibilitychange` restore; correctly tree-shaken until Phase 3.8 (ThreadView) imports it
+- [x] `api.js`: re-exports `apiFetch` pre-configured with nonce middleware from `window.stcrmPortal.nonce`
+- [x] `App.jsx`: root component wiring session detection + routing + 6 view stubs (replaced in 3.4–3.10)
+- [x] Bundle deps: `react-dom, react-jsx-runtime, wp-api-fetch, wp-element` (auto-detected by `@wordpress/dependency-extraction-webpack-plugin`)
+- [x] All 6 `?view=` routes return HTTP 200; `stcrmPortal` nonce verified in page source; `stcrm:navigate` + VIEWS + session path all present in built bundle
 
 ---
 
