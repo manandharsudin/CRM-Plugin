@@ -195,7 +195,7 @@
   - On API success: upsert contact preserving existing name (licenses endpoint returns no name), cache result 1h
 - [x] Graceful degradation: Freemius API unreachable → accept as unverified, flag `verification_pending=1` in contact, queue re-check job
   - Only flags pending when token IS configured (`stcrm_no_api_token` error code excluded)
-  - AS job `stcrm_reverify_contact(contact_id, product_id, email, license_key)` queued 1h out; raw key lives temporarily in AS jobs table, never in contacts table
+  - AS job `stcrm_reverify_contact(contact_id, product_id, email, encrypted_key)` queued 1h out; key is AES-256-CBC encrypted before storing in AS jobs table (patched 2026-06-25)
 - [x] No match / failed verification → verified=0, tier=free, priority=low — never reject
 
 ---
@@ -212,7 +212,7 @@
 - [x] Turn limit check: COUNT customer messages since last non-internal agent message on the ticket
   - Free: ≥3 → 423 `stcrm_turn_limit` (composer locks in portal UI)
   - Pro: silent ceiling ≥10 → 423 `stcrm_turn_limit` (UI never shows lock for pro)
-  - No agent reply yet → counts from thread start (COALESCE to 0)
+  - No agent reply yet → COALESCE falls back to MIN(first customer msg id) so only follow-ups count, not the initial ticket (fixed 2026-06-25 commit 9aeb38b)
   - Single correlated subquery (atomic — no TOCTOU race)
 - [x] Guard matrix values read from Settings (editable, not hardcoded)
   - Keys: `guard_free_open` (1), `guard_pro_open` (5), `guard_free_turn` (3), `guard_silent_ceiling` (10)
@@ -402,6 +402,23 @@
 - Admin inbox loads and displays tickets with correct sort and filter
 - Admin thread shows all message types with correct visual styling
 - Admin manage panel changes status/priority/assignee
+
+---
+
+### Phase 2 Security Patch ✅ (2026-06-25, plugin commit e9759fe)
+
+10 findings from full code review; all fixed:
+
+- [x] `check_ticket_cap()`: `null === $rows` → `$wpdb->last_error` — DB error no longer silently passes the cap check
+- [x] `create_ticket()`: check `insert_message()` return; delete orphan ticket row on failure (was silent 201 with no first message)
+- [x] Admin `create_message()`: guard `closed` ticket status — replies blocked 403, internal notes still allowed (public endpoint already had this guard; admin did not)
+- [x] Customer `create_message()`: add `resolved_at => null` to reopen `update_ticket()` — resolved tickets no longer keep stale `resolved_at` after customer reply
+- [x] Customer `create_message()`: check `update_ticket()` return; return 500 on failure
+- [x] `queue_reverify()`: license key AES-256-CBC encrypted via `STCRM_Encryption` before entering AS jobs table; `reverify_contact()` decrypts at entry — raw key no longer appears in DB exports or backups
+- [x] Admin `create_message()`: check `update_ticket()` return; return 500 on failure
+- [x] `resolve_via_license_key()`: add `?? get_contact_by_license_key_hash()` fallback if post-upsert email lookup returns null (replica-lag guard)
+- [x] `STCRM_Freemius_Sync`: call `delete_transient(STCRM_Tier_Resolver::CACHE_PREFIX . $key_hash)` on all tier-change events (install.upgraded/downgraded/cancelled, license.expired/cancelled) — stale 1-hour pro cache busted immediately
+- [x] Admin `update_ticket()` PATCH: return 415 when request body is non-empty but not JSON (was silent `{updated:false}` 200)
 
 ---
 
