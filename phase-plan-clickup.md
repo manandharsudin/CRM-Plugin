@@ -446,12 +446,18 @@
 
 ---
 
-### 3.2 Classic Page Template
+### 3.2 Classic Page Template ✅ Complete (2026-06-25, plugin commit 42cbe8d)
 
-- [ ] Register "Support Portal" page template via `theme_page_templates` filter
-- [ ] Create PHP template file: full `get_header()` / `get_footer()` wrapper calling `do_blocks( '<!-- wp:sublime-crm/support-portal /-->' )`
-- [ ] Confirm template appears in Page Attributes dropdown when editing a page
-- [ ] Create a "Support" page in Laragon environment, assign template, verify block renders
+- [x] Register "Support Portal" page template via `theme_page_templates` filter
+- [x] Create PHP template file: full `get_header()` / `get_footer()` wrapper calling `do_blocks( '<!-- wp:sublime-crm/support-portal /-->' )`
+- [x] Confirm template appears in Page Attributes dropdown when editing a page — verified 2026-06-25
+- [x] Create a "Support" page in Laragon environment, assign template, verify block renders — verified 2026-06-25
+
+**Implementation notes (2026-06-25, commit `42cbe8d`):**
+- Template slug: `stcrm-support-portal.php`; registered via `theme_page_templates` filter, served via `template_include` intercept in `STCRM_Page_Templates`
+- WP only discovers templates inside the active theme directory — plugin templates require both filters: `theme_page_templates` to add to dropdown + `template_include` to swap in the file
+- Body class `page-template-stcrm-support-portal` confirms WP is applying the correct template
+- `<div id="crm-portal">` is a direct child of `.site` with no wrapping content area — theme hero/CTA sections appear around it (expected for classic template with no sidebar)
 
 ---
 
