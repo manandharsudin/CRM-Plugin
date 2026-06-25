@@ -375,16 +375,20 @@
 
 ---
 
-### 2.10 Admin Contacts UI
+### 2.10 Admin Contacts UI ✅ Complete (2026-06-25)
 
-- [ ] PHP page class for Contacts screen
-- [ ] Render page shell: title + "Run Freemius backfill" button + subhead
-- [ ] Render contacts table (PHP `WP_List_Table` or custom): avatar, Name (blue-strong), Email (mono), Tier badge, Plan, License badge (dot + status), Open tickets (blue pill if >0), Last activity, chevron
-- [ ] Rows link to Contact Detail page
-- [ ] Footer: "Showing N of N · synced X ago via webhook"
-- [ ] Contact Detail page: 300px profile card + ticket history table
-- [ ] Profile card: avatar, name, email, Tier + License badges, key/values (Plan, Freemius ID, Active sites, Lifetime value, Customer since), "View in Freemius" button
-- [ ] Ticket history table: #, Subject, Status, Priority, Updated, chevron → links to Thread
+- [x] PHP page class for Contacts screen — `render_contacts_page()` in `STCRM_Admin`
+- [x] Render page shell: title + "Run Freemius backfill" button + subhead
+- [x] Render contacts table (PHP custom, not WP_List_Table): avatar initial circle, Name (blue-strong link), Email (mono), Tier badge, Plan, License badge (dot + status), Open tickets (blue pill if >0), Last activity, chevron
+- [x] Rows link to Contact Detail page (`?page=stcrm-contact&id=N`); whole row is JS-clickable via data-href
+- [x] Footer: "Showing N–M of total · synced X ago via webhook" + pagination controls
+- [x] Contact Detail page — `render_contact_detail_page()`: 300px profile card + ticket history panel
+- [x] Profile card: avatar, name, Tier + License badges, kv-list (Email, Plan, Freemius ID, Active sites, Customer since), "View in Freemius" external button, "Synced from Freemius · read-only" footer
+- [x] Ticket history table: #, Subject, Status badge, Priority badge, Updated, chevron → links to Thread
+- [x] DB: `get_admin_contacts()` extended with `open_tickets_count` correlated subquery; `count_contacts()` + `get_contacts_last_updated()` added
+- [x] `format_contact()` in admin controller updated to expose `open_tickets_count`
+- [x] New `stcrm-contact` hidden submenu registered (same pattern as `stcrm-thread` — must stay in submenu for WP cap checks)
+- [x] CSS: avatar circle, license dot-badge variants, open-pill, contacts table, contact detail layout, profile card, ticket history table, utility classes (`.stcrm-muted`, `.stcrm-mono`, `.stcrm-kicker`), `.stcrm-badge--tier-free`, `.stcrm-badge--priority-normal`
 
 ---
 
