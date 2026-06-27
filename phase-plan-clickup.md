@@ -601,13 +601,23 @@
 
 ---
 
-### 4.1 Email Infrastructure
+### 4.1 Email Infrastructure ✅ Complete (2026-06-27, Playwright + AS DB verification)
 
-- [ ] Build `Services\Mailer` class wrapping `wp_mail`
-- [ ] All sends queued via Action Scheduler (single retry on failure, then log)
-- [ ] Debounce logic: max 1 customer notification per ticket per N minutes (N from Settings). Use transient keyed by `ticket_id` to suppress rapid-fire notifications.
-- [ ] Email sender: From name + From address from Settings
-- [ ] Agent fallback: if ticket unassigned, send agent alert to fallback address from Settings
+- [x] Build `Services\Mailer` class wrapping `wp_mail` — `includes/Services/class-stcrm-mailer.php`
+- [x] All sends queued via Action Scheduler (single retry +5 min on failure, then log) — 5 `queue_*()` static methods + 5 `handle_*()` AS handlers registered in `define_cron_hooks()`
+- [x] Debounce logic: max 1 customer notification per ticket per N minutes (N from `email_debounce_min` setting) — transient `stcrm_debounce_{ticket_id}` set after successful send
+- [x] Email sender: From name + From address from Settings (`email_from_name`, `email_from_address`)
+- [x] Agent fallback: if ticket unassigned, send agent alert to `email_agent_fallback` setting (falls back to WP admin_email) — new setting added to defaults, Email tab UI, and save handler
+- [x] Token generated at AS handler time — raw token never passed through AS jobs table or stored in DB
+
+**Verification notes (2026-06-27):**
+- Playwright + direct AS DB query (`wp_actionscheduler_actions`)
+- `stcrm_send_ticket_confirmation` + `stcrm_send_agent_alert`: queued on `POST /tickets`, WP cron ran both handlers to `complete` status during test
+- `stcrm_send_magic_link`: queued on `POST /auth/magic-link`, pending in AS queue
+- `stcrm_send_reply_notification`: queued on `POST /admin/tickets/{id}/messages`, pending in AS queue
+- No PHP fatal errors, no stcrm entries in debug.log after handler execution
+- `email_agent_fallback` input visible on Settings › Email tab
+- Email templates are stubs (placeholder HTML) — replaced in Phases 4.2–4.5
 
 ---
 
