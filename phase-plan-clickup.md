@@ -715,12 +715,19 @@ Implementation in `SublimeCRM::auto_close_tickets()` (`includes/class-sublime-cr
 
 ---
 
-### 4.8 Uninstall
+### 4.8 Uninstall ✅ Complete (2026-06-27)
 
-- [ ] Create `uninstall.php`
-- [ ] Check "delete all data on uninstall" setting (default: OFF)
-- [ ] If ON: drop all 4 tables, delete all `wp_options` keys, cancel all Action Scheduler jobs, clear all cron events, delete session cookies
-- [ ] If OFF: leave data intact
+- [x] Create `uninstall.php`
+- [x] Check "delete all data on uninstall" setting (default: OFF)
+- [x] If ON: drop all 4 tables, delete all `wp_options` keys, cancel all Action Scheduler jobs, clear all cron events, delete session cookies
+- [x] If OFF: leave data intact
+
+Implementation notes:
+- `uninstall.php` was scaffolded in Phase 1; updated here to add AS job cancellation and WP-Cron cleanup.
+- Loads `vendor/autoload.php` explicitly (plugin inactive at uninstall time) then calls `as_unschedule_all_actions()` per hook. Falls back to direct SQL delete from `actionscheduler_actions` if AS not available.
+- `wp_clear_scheduled_hook()` for both daily crons (also runs on deactivation, repeated for safety).
+- Session cookies cannot be cleared server-side; dropping `wp_stcrm_tokens` invalidates all outstanding sessions.
+- Setting `delete_on_uninstall` (default 0/OFF): in defaults array, Settings UI (Tickets tab checkbox), save handler — all already in place from Phase 1.
 
 ---
 

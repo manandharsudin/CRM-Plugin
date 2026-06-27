@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-27 (Phase 4.7 — security hardening pass complete)
+> Last updated: 2026-06-27 (Phase 4.8 — uninstall complete)
 
 ---
 
@@ -470,7 +470,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 | 1 — Foundation | ✅ Complete (2026-06-22) | Tables + migrations (dbDelta + schema version), Action Scheduler, settings screen, webhook receiver + HMAC validation, backfill job | Existing Freemius customers appear as contacts; test purchase/cancel updates tier within seconds |
 | 2 — Tickets core | ✅ Complete (2026-06-25) | REST API (public + admin routes), guard matrix, admin inbox + thread UI + contacts UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
 | 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
-| 4 — Notifications & hardening | 🔄 In progress — 4.1–4.7 ✅ (2026-06-27) | 4.1 ✅: STCRM_Mailer + 5 AS email hooks + email_agent_fallback setting. 4.2–4.5 ✅: all 5 HTML email templates. 4.6 ✅: auto_close_tickets cron. 4.7 ✅: security audit — `get_portal_url()` wrapped in `$wpdb->prepare()`; honeypot added to AuthView + ExpiredView (frontend) and `request_magic_link()` (backend). All 12 checklist items PASS. 4.8–4.10 pending. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
+| 4 — Notifications & hardening | 🔄 In progress — 4.1–4.8 ✅ (2026-06-27) | 4.1 ✅: STCRM_Mailer + 5 AS email hooks + email_agent_fallback setting. 4.2–4.5 ✅: all 5 HTML email templates. 4.6 ✅: auto_close_tickets cron. 4.7 ✅: security audit. 4.8 ✅: uninstall — AS job cancellation (as_unschedule_all_actions() per hook + SQL fallback), WP-Cron clear, table drops, options/transients delete, capability removal, session cookie note. 4.9–4.10 pending. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 
 ---
 
