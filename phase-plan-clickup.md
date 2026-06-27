@@ -617,48 +617,60 @@
 - `stcrm_send_reply_notification`: queued on `POST /admin/tickets/{id}/messages`, pending in AS queue
 - No PHP fatal errors, no stcrm entries in debug.log after handler execution
 - `email_agent_fallback` input visible on Settings › Email tab
-- Email templates are stubs (placeholder HTML) — replaced in Phases 4.2–4.5
+- Email templates replaced in Phases 4.2–4.5 ✅
 
 ---
 
-### 4.2 Email Template: Ticket Confirmation (Customer)
+### 4.2 Email Template: Ticket Confirmation (Customer) ✅ Complete (2026-06-27)
 
-- [ ] Trigger: after `POST /tickets` creates ticket
-- [ ] Recipient: customer email
-- [ ] Subject: "We've received your ticket: {subject}"
-- [ ] Body: plain text + HTML. One button: "View your ticket →" linking to magic-link URL (deep-links to thread)
-- [ ] This email is the customer's first access path to the thread — magic link is mandatory
-- [ ] **No message content in email body**
+- [x] Trigger: after `POST /tickets` creates ticket
+- [x] Recipient: customer email
+- [x] Subject: "We've received your ticket: {subject}"
+- [x] Body: plain text + HTML. One button: "View your ticket →" linking to magic-link URL (deep-links to thread)
+- [x] This email is the customer's first access path to the thread — magic link is mandatory
+- [x] **No message content in email body**
 
----
+Also implemented in 4.2: `build_magic_link_email()` — subject "Your sign-in link for support", "Sign in to support →" CTA, one-time-link footer note.
 
-### 4.3 Email Template: Agent Reply Notification (Customer)
-
-- [ ] Trigger: after `POST /admin/tickets/{id}/messages` with `is_internal_note=false`
-- [ ] Recipient: customer email
-- [ ] Subject: "Your ticket has a new reply: {subject}"
-- [ ] Body: one button "View the reply →" linking to magic-link URL
-- [ ] Apply debounce (§4.1)
-- [ ] **No message content in email body — magic-link button only**
+**Verification (2026-06-27):** Playwright + AS DB query. `stcrm_send_ticket_confirmation` queued on `POST /tickets`, completed without errors. `stcrm_send_magic_link` queued on `POST /auth/magic-link`, completed without errors. complete=20, pending=0, failed=0 across all template types.
 
 ---
 
-### 4.4 Email Template: New Ticket / Customer Message Alert (Agent)
+### 4.3 Email Template: Agent Reply Notification (Customer) ✅ Complete (2026-06-27)
 
-- [ ] Trigger: new ticket created OR customer message posted
-- [ ] Recipient: assigned agent WP email (fallback: Settings fallback address)
-- [ ] Subject: "[Support] New message on: {subject} #{id}"
-- [ ] Body: ticket subject + direct link to Thread admin page
-- [ ] Internal alert — may include a message snippet (vendor-side only)
+- [x] Trigger: after `POST /admin/tickets/{id}/messages` with `is_internal_note=false`
+- [x] Recipient: customer email
+- [x] Subject: "Your ticket has a new reply: {subject}"
+- [x] Body: one button "View the reply →" linking to magic-link URL
+- [x] Apply debounce (§4.1)
+- [x] **No message content in email body — magic-link button only**
+
+**Verification (2026-06-27):** `stcrm_send_reply_notification` queued on `POST /admin/tickets/{id}/messages`, completed without errors.
 
 ---
 
-### 4.5 Email Template: Auto-Close Notification (Customer)
+### 4.4 Email Template: New Ticket / Customer Message Alert (Agent) ✅ Complete (2026-06-27)
 
-- [ ] Trigger: auto-close cron closes a resolved ticket
-- [ ] Recipient: customer email
-- [ ] Subject: "Your support ticket has been closed: {subject}"
-- [ ] Body: "Your ticket was closed after {N} days resolved. If you need further help, open a new ticket." + link to portal
+- [x] Trigger: new ticket created OR customer message posted
+- [x] Recipient: assigned agent WP email (fallback: Settings fallback address)
+- [x] Subject: "[Support] New message on: {subject} #{id}"
+- [x] Body: ticket subject + direct link to Thread admin page
+- [x] Internal alert — may include a message snippet (vendor-side only)
+
+Implementation detail: `last_message_snippet()` helper fetches last customer `body` (non-internal, `sender_type=customer`), strips HTML, truncates to 200 chars.
+
+**Verification (2026-06-27):** `stcrm_send_agent_alert` completed without errors.
+
+---
+
+### 4.5 Email Template: Auto-Close Notification (Customer) ✅ Complete (2026-06-27)
+
+- [x] Trigger: auto-close cron closes a resolved ticket
+- [x] Recipient: customer email
+- [x] Subject: "Your support ticket has been closed: {subject}"
+- [x] Body: "Your ticket was closed after {N} days resolved. If you need further help, open a new ticket." + link to portal
+
+Note: `build_auto_close_notice()` implemented and PHP-verified. Runtime trigger (AS handler) verified when 4.6 (auto-close cron) is implemented.
 
 ---
 
