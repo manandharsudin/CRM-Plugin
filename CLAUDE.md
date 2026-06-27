@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-27 (Phase 4.8 — uninstall complete)
+> Last updated: 2026-06-27 (Phase 4 complete — classic page template removed)
 
 ---
 
@@ -95,25 +95,13 @@ Not a theme module. Not embedded in SublimeBlocks. No CRM logic in the theme.
 
 Routing the ticket form through `st_form_submissions` would break real-time tier verification, the 409 guard response (with existing ticket link), and the immediate magic-link confirmation email (the customer's first access to the thread).
 
-### 4.3 Portal rendering — NOT a dedicated page, NOT a shortcode
+### 4.3 Portal rendering — block in default template (no dedicated template)
 
-The portal uses a **`sublime-crm/support-portal` dynamic block** registered by the CRM plugin.
+The portal uses a **`sublime-crm/support-portal` dynamic block** registered by the CRM plugin, placed directly in a page's content area using the default theme template.
 
-**The block is the stable piece.** The page template wrapper changes between classic and FSE, but the block is identical in both.
+**No dedicated page template.** The classic page template system (`STCRM_Page_Templates`, `templates/support-portal.php`) was removed in Phase 4 — it was unnecessary overhead since the block works in any template. Current setup: page ID 2371, slug `new-support`, block in content, default template.
 
-#### Classic theme (current — SublimeTheme is classic now):
-```php
-// Plugin registers via theme_page_templates filter
-// PHP template file renders:
-do_blocks( '<!-- wp:sublime-crm/support-portal /-->' );
-```
-User creates a "Support" page → picks the template from Page Attributes.
-
-#### FSE block theme (future — migration planned):
-```
-templates/support-portal.html  ← ~20 lines of block markup using sublime-crm/support-portal
-```
-Registered via `get_block_templates` filter. The block itself is **zero changes**.
+This approach works identically on classic and FSE themes — no plugin changes needed if the theme migrates.
 
 #### What `sublime-crm/support-portal` does:
 - Editor: static placeholder
@@ -470,7 +458,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 | 1 — Foundation | ✅ Complete (2026-06-22) | Tables + migrations (dbDelta + schema version), Action Scheduler, settings screen, webhook receiver + HMAC validation, backfill job | Existing Freemius customers appear as contacts; test purchase/cancel updates tier within seconds |
 | 2 — Tickets core | ✅ Complete (2026-06-25) | REST API (public + admin routes), guard matrix, admin inbox + thread UI + contacts UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
 | 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
-| 4 — Notifications & hardening | 🔄 In progress — 4.1–4.8 ✅ (2026-06-27) | 4.1 ✅: STCRM_Mailer + 5 AS email hooks + email_agent_fallback setting. 4.2–4.5 ✅: all 5 HTML email templates. 4.6 ✅: auto_close_tickets cron. 4.7 ✅: security audit. 4.8 ✅: uninstall — AS job cancellation (as_unschedule_all_actions() per hook + SQL fallback), WP-Cron clear, table drops, options/transients delete, capability removal, session cookie note. 4.9–4.10 pending. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
+| 4 — Notifications & hardening | ✅ Complete (2026-06-27) | 4.1–4.8 ✅ complete. 4.9 = production ops (no code). 4.10 = removed — classic page template system (`STCRM_Page_Templates`, `templates/support-portal.php`) deleted; portal uses the block placed in default template. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 
 ---
 

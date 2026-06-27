@@ -746,14 +746,15 @@ Implementation notes:
 
 ---
 
-### 4.10 FSE Template Prep (Future-Ready)
+### 4.10 FSE Template Prep — REMOVED (2026-06-27)
 
-- [ ] Create `templates/support-portal.html` with block markup using `sublime-crm/support-portal`
-  - Uses `core/template-part` for header and footer
-  - Single `sublime-crm/support-portal` block in content area
-- [ ] Register template via `get_block_templates` filter (returns template but does not activate)
-- [ ] Confirm block itself is unchanged — zero portal JS changes required
-- [ ] Document: when theme switches to FSE, assign this template to the Support page in Site Editor
+No dedicated template needed. The `sublime-crm/support-portal` block is placed directly in page content using the default theme template — which is how the portal is already running (page ID 2371, slug `new-support`). The classic page template system (`STCRM_Page_Templates`, `templates/support-portal.php`) has been removed entirely:
+
+- Deleted `includes/class-stcrm-page-templates.php`
+- Deleted `templates/support-portal.php` + `templates/` directory
+- Removed `require_once` + `define_template_hooks()` call + method from `class-sublime-crm.php`
+
+When/if the theme goes FSE, the block already works in the default template — no plugin changes needed.
 
 ---
 
