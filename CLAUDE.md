@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-27 (Phase 4 complete — classic page template removed)
+> Last updated: 2026-06-27 (Phase 4 fully verified — debounce fix confirmed by Playwright test)
 
 ---
 

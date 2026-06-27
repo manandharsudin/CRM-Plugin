@@ -761,12 +761,12 @@ When/if the theme goes FSE, the block already works in the default template — 
 ### Phase 4 Acceptance
 - Ticket confirmation email arrives within 30 seconds with working magic-link
 - Agent reply notification arrives with no message content, only the magic-link button
-- Reply notification is debounced (3 rapid agent replies → 1 customer email)
+- Reply notification is debounced (3 rapid agent replies → 1 customer email) — **VERIFIED 2026-06-27**: Playwright test (`test-debounce.js`) confirmed 3 rapid REST replies → exactly 1 `stcrm_send_reply_notification` queued. Fix: added pending-lock transient (`stcrm_reply_pending_{id}`) checked at queue time in `queue_reply_notification()`.
 - Auto-close runs on schedule; closed ticket inserts system message
-- All security audit items checked off
-- Uninstall with setting ON drops all tables and options
-- mail-tester.com score 9–10 on production domain
-- FSE template file exists and registers without errors
+- All security audit items checked off — **VERIFIED 2026-06-27** (Phase 4.7): all 12 security items pass; 2 fixes applied (`$wpdb->prepare()` in Mailer, honeypot in auth/expired views)
+- Uninstall with setting ON drops all tables and options — **VERIFIED 2026-06-27** (Phase 4.8): AS job cancellation + WP cron hooks cleared in `uninstall.php`
+- mail-tester.com score 9–10 on production domain — pending (Phase 4.9 production ops)
+- FSE template file — REMOVED 2026-06-27 (Phase 4.10): block works in default template; no dedicated template needed
 
 ---
 
