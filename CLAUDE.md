@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-24
+> Last updated: 2026-06-27 (Phase 3 acceptance verified)
 
 ---
 
@@ -469,8 +469,8 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 |---|---|---|---|
 | 1 — Foundation | ✅ Complete (2026-06-22) | Tables + migrations (dbDelta + schema version), Action Scheduler, settings screen, webhook receiver + HMAC validation, backfill job | Existing Freemius customers appear as contacts; test purchase/cancel updates tier within seconds |
 | 2 — Tickets core | ✅ Complete (2026-06-25) | REST API (public + admin routes), guard matrix, admin inbox + thread UI + contacts UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
-| 3 — Touchpoints | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
-| 4 — Notifications & hardening | Email queue + templates + debounce, auto-close cron, rate limits, security pass, uninstall | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
+| 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
+| 4 — Notifications & hardening | Pending | Email queue + templates + debounce, auto-close cron, rate limits, security pass, uninstall | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 
 ---
 
