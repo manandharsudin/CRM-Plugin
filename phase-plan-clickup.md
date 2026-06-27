@@ -674,11 +674,22 @@ Note: `build_auto_close_notice()` implemented and PHP-verified. Runtime trigger 
 
 ---
 
-### 4.6 Auto-Close Cron
+### 4.6 Auto-Close Cron ✅ Complete (2026-06-27)
 
-- [ ] Daily cron event (registered in Phase 1 — implement logic here)
-- [ ] Query: tickets WHERE status='resolved' AND resolved_at < (NOW() - auto_close_days)
-- [ ] For each: set status='closed', insert `system` message ("ticket auto-closed after N days"), queue auto-close notification email
+- [x] Daily cron event (registered in Phase 1 — implement logic here)
+- [x] Query: tickets WHERE status='resolved' AND resolved_at < (NOW() - auto_close_days)
+- [x] For each: set status='closed', insert `system` message ("ticket auto-closed after N days"), queue auto-close notification email
+
+Implementation in `SublimeCRM::auto_close_tickets()` (`includes/class-sublime-crm.php`):
+- Guards `$wpdb->update()` return — skips ticket if update fails (e.g. already closed race)
+- Omits `sender_id` from insert so DB defaults to NULL (avoids null-format issue)
+- Calls `STCRM_Mailer::queue_auto_close_notice($ticket_id)` after confirmed insert
+- Batch cap: LIMIT 100 per daily run
+
+**Verification (2026-06-27):** PHP CLI bootstrap + Playwright browser check.
+- Ticket #14 set to resolved/8 days ago → cron fired → status = closed, system message inserted, `stcrm_send_auto_close_notice` = complete in AS.
+- Admin thread screenshot confirmed: "Closed" badge, system message visible, sidebar Status = Closed.
+- No PHP errors in debug.log.
 
 ---
 
