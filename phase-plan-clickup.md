@@ -693,20 +693,25 @@ Implementation in `SublimeCRM::auto_close_tickets()` (`includes/class-sublime-cr
 
 ---
 
-### 4.7 Security Hardening Pass
+### 4.7 Security Hardening Pass ✅ Complete (2026-06-27)
 
-- [ ] Audit all `$wpdb` queries — confirm 100% use `$wpdb->prepare()`
-- [ ] Audit all output — confirm `esc_html()`, `esc_attr()`, `esc_url()` on all rendered data
-- [ ] Confirm `body` stored via `wp_kses` minimal whitelist only (links, code, line breaks)
-- [ ] Confirm internal notes excluded **at the query level** in all public-facing endpoints (not template-level)
-- [ ] Confirm ownership check on every `GET /tickets/{id}` and `POST /tickets/{id}/messages`
-- [ ] Confirm tokens: `random_bytes(32)` → URL-safe base64; only SHA-256 hash stored in DB; raw never stored or logged
-- [ ] Confirm session cookie: HttpOnly, Secure, SameSite=Lax
-- [ ] Confirm HMAC webhook validation uses `hash_equals()` (constant-time)
-- [ ] Confirm honeypot on ticket form and magic-link form
-- [ ] Confirm rate limits active on all public endpoints (§2.4)
-- [ ] Confirm `stcrm_manage_tickets` capability check on every admin route
-- [ ] URLs in customer messages render with `rel="nofollow noopener"`
+- [x] Audit all `$wpdb` queries — confirm 100% use `$wpdb->prepare()`
+- [x] Audit all output — confirm `esc_html()`, `esc_attr()`, `esc_url()` on all rendered data
+- [x] Confirm `body` stored via `wp_kses` minimal whitelist only (links, code, line breaks)
+- [x] Confirm internal notes excluded **at the query level** in all public-facing endpoints (not template-level)
+- [x] Confirm ownership check on every `GET /tickets/{id}` and `POST /tickets/{id}/messages`
+- [x] Confirm tokens: `random_bytes(32)` → URL-safe base64; only SHA-256 hash stored in DB; raw never stored or logged
+- [x] Confirm session cookie: HttpOnly, Secure, SameSite=Lax
+- [x] Confirm HMAC webhook validation uses `hash_equals()` (constant-time)
+- [x] Confirm honeypot on ticket form and magic-link form
+- [x] Confirm rate limits active on all public endpoints (§2.4)
+- [x] Confirm `stcrm_manage_tickets` capability check on every admin route
+- [x] URLs in customer messages render with `rel="nofollow noopener"`
+
+**Audit result (2026-06-27):** 3-agent parallel audit across all PHP + JSX. 2 fixes applied:
+1. `get_portal_url()` in `class-stcrm-mailer.php` — raw `$wpdb->get_row()` wrapped in `$wpdb->prepare()` using `$wpdb->esc_like()` pattern. (Auth-controller and Launcher already had `prepare()` — PASS.)
+2. Magic-link honeypot added: hidden `company_url` field in `AuthView.jsx` + `ExpiredView.jsx`; server-side discard in `request_magic_link()` (returns same generic 200). Client-side guard fakes success to avoid API hit.
+**Verification (2026-06-27):** Playwright browser test — `?view=auth` portal rendered, honeypot field confirmed in DOM, API: normal (empty `company_url`) → 200, trap (filled `company_url`) → 200 (no signal). All 12 items PASS.
 
 ---
 
