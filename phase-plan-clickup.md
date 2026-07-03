@@ -857,13 +857,21 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.5 Inbox Search Box
+### 5.5 Inbox Search Box ✅ Complete (2026-07-03)
 
-- [ ] Add search input to Inbox filter toolbar: "Search subject or email…"
-- [ ] Wire JS to include a `search` param on fetch/filter-change
-- [ ] Add `search` param to `GET /admin/tickets` REST args in the admin controller
-- [ ] Add `LIKE` search over ticket subject + contact email to `STCRM_Database::get_admin_tickets()` WHERE clause (currently only status/priority/tier/assignee are filterable)
-- Files: `admin/class-stcrm-admin.php`, `src/admin/inbox.jsx`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php` (or wherever `get_admin_tickets()` lives)
+- [x] Add search input to Inbox filter toolbar: "Search subject or email…"
+- [x] Wire JS to include a `search` param on fetch/filter-change
+- [x] Add `search` param to `GET /admin/tickets` REST args in the admin controller
+- [x] Add `LIKE` search over ticket subject + contact email to `STCRM_Database::get_admin_tickets()` WHERE clause (currently only status/priority/tier/assignee are filterable)
+- Files: `admin/class-stcrm-admin.php`, `src/admin/inbox.jsx`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `admin/css/stcrm-admin.css`
+
+**Implementation notes (2026-07-03):**
+- New `<input type="search" id="stcrm-filter-search">` added to the Inbox filter toolbar, pushed to the right end via `margin-left: auto` in `stcrm-admin.css`
+- `STCRM_Database::get_admin_tickets()`: `search` filter adds `( t.subject LIKE %s OR c.email LIKE %s )` using the same `%` . `$wpdb->esc_like()` . `%` pattern as other LIKE queries in the plugin; reuses the existing `c` (contacts) JOIN already present for `contact_email`/`contact_name`
+- `api/class-stcrm-admin-controller.php`: `search` REST arg added (`type: string`), trimmed + `sanitize_text_field()`'d before reaching the DB layer
+- `src/admin/inbox.jsx`: unlike the other filters (discrete `<select>` elements wired on `change`), the search input is wired on `input` with a 300ms debounce timer — avoids firing a fetch per keystroke. `getInitialFilters()` and the generic filter → query-string effect needed no changes since `search` slots into the existing keyed-object pattern automatically.
+- **Verified via Playwright (2026-07-03):** direct REST checks confirmed subject-substring search returns only the matching ticket, email search returns all tickets sharing that email, no-match search returns an empty array. Live UI check (typing into the box) confirmed the visible Inbox list narrows from 12 rows to 1 and restores to 12 on clearing, using `waitForFunction` rather than fixed delays to avoid a debounce/fetch timing race in the test itself. Zero console errors.
+- Plugin commit: `69ca300` ✅ pushed (2026-07-03)
 
 ---
 
