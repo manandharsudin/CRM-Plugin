@@ -460,6 +460,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 | 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
 | 4 — Notifications & hardening | ✅ Complete (2026-06-27) | 4.1–4.8 ✅ complete. 4.9 = production ops (no code). 4.10 = removed. QA pass applied: portal-URL transient cache (DAY_IN_SECONDS, bust on save_post), email header injection prevention (CR/LF strip), esc_like added to Launcher, salt-rotation warning in Settings (Freemius tab), dead ViewStub removed from portal App.jsx, auto-close insert error guard. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 | 5 — Design-Handoff Gap Closure | 🔄 In progress (started 2026-07-03) | 11 confirmed gaps found via full audit vs. design handoff (see §18). Full task breakdown in `phase-plan-clickup.md` Phase 5 (5.1–5.11). | All 11 gaps resolved or explicitly marked out-of-scope with reasoning |
+| 6 — Multi-Product Freemius Support | ⏸️ Deferred (parked 2026-07-03) | Not started — explicitly held until Phase 5 finishes. Full findings + recommended direction in `phase-plan-clickup.md` Phase 6. See §21 below for the short version. | Not yet scoped |
 
 ---
 
@@ -475,7 +476,7 @@ A full pass comparing `README.md` + `support-crm-spec.md` against the built plug
 **Found by the 2026-07-03 audit (not on README's own list):**
 4. ~~No Assignee UI anywhere in admin~~ — ✅ **Resolved 2026-07-03** (see below)
 5. ~~Inbox search box~~ — ✅ **Resolved 2026-07-03** (see below)
-6. **Freemius webhook missing event types** — `license.created`/`payment.created`, `license.plan.changed`, `license.extended`/`shortened`, `license.deleted` all fall through to a silent no-op
+6. ~~Freemius webhook missing event types~~ — ✅ **Resolved 2026-07-03** (see below)
 7. **Thread sidebar Customer panel missing fields** — License-active badge, Expires, Customer since, footer note (data already in the API response, just not rendered)
 8. **Thread header missing category badge + "Assigned to you" indicator**
 9. **Inbox list pane missing header row** ("N tickets" / "Sort: Smart")
@@ -495,6 +496,8 @@ A post-implementation code review found 5 issues; 4 were fixed in the same commi
 **Resolved 2026-07-03 — Admin Assignee Controls (5.4), plugin commit `b4cf9b2`:** Thread → Manage panel gained an Assignee `<select>` (Unassigned + agents from new `STCRM_Admin::get_agents()`), wired to the existing `PATCH /admin/tickets/{id}` `assigned_to`. Inbox filter toolbar's Assignee `<select>` is now actually rendered (the JS listener for it already existed as dead code). `GET /admin/tickets?assignee=` extended to accept `me`/`unassigned` keywords alongside numeric IDs. Mid-review, a "Me" dropdown option was added then removed after the user flagged it as redundant with the current user already appearing by name in the same list — kept the harmless `me` REST keyword, dropped only the UI option. Verified via Playwright: assign/persist/unassign round-trip, all three REST filter modes return correct ticket sets.
 
 **Resolved 2026-07-03 — Inbox Search Box (5.5), plugin commit `69ca300`:** New search input in the Inbox filter toolbar ("Search subject or email…"). `GET /admin/tickets?search=` matches ticket subject + contact email via `LIKE` (reuses the existing contacts JOIN). JS debounces the search input on 300ms (unlike the other filters, which fire immediately on `change` since they're discrete selects). Verified via Playwright: subject/email search return correct ticket sets, no-match returns empty, live typed search narrows/restores the visible list correctly.
+
+**Resolved 2026-07-03 — Freemius Webhook Event Coverage (5.6), plugin commit `86dfed2`:** Added handlers for `license.created`/`payment.created` (new pro purchase, reuses the existing `handle_license_status_change()`), `license.plan.changed` (new `handle_plan_changed()`, plan only), `license.extended`/`shortened` (new `handle_license_expiry_changed()`, expiry only), and `license.deleted` (folded into the cancelled/free fallback). `handle_license_status_change()` now also updates `plan` when present, without nulling it on payloads that omit it. All new paths bust the tier-resolution cache transient. Verified via 8 direct event-simulation scenarios (no Freemius product existed yet to test against real/sandbox events) — real/sandbox verification still pending once the product is created. Surfaced the Phase 6 multi-product finding (see below) while investigating this.
 
 ---
 
@@ -534,5 +537,5 @@ Run in order when pushing to production:
 | Newsletter composer | Same SMTP pipe + contacts table |
 | Attachments | Deliberately out of v1 |
 | Two-way email piping | Needs inbound webhook (Postmark/Mailgun) |
-| Multi-product UI | Schema already scoped by `product_id` everywhere |
+| Multi-product UI | **No longer purely "designed-for" — now a real, needed gap.** Schema is scoped by `product_id` everywhere, but the *application* only ever supports one Freemius product: Settings has a single `product_id`/`secret_key`/`api_token`, the webhook's HMAC check validates against that one secret (a second product's webhook would 401), and every consumer read (ticket creation, portal, admin views, backfill) hardcodes that one `product_id`. Confirmed via code audit 2026-07-03 — see Phase 6 in `phase-plan-clickup.md` for the full breakdown and recommended direction (settings-array + payload-first signature lookup). Parked until Phase 5 finishes; the open design question (does the ticket form need a "which product?" selector, or should it auto-detect via email/license match) needs the user's call before any code. |
 | Realtime transport | Swap polling for WebSocket service; endpoints unchanged |

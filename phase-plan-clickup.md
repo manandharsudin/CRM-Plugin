@@ -875,14 +875,24 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.6 Freemius Webhook Event Coverage
+### 5.6 Freemius Webhook Event Coverage ✅ Complete (2026-07-03)
 
-- [ ] Add handler for `license.created` / `payment.created` (new pro purchase not accompanied by an `install.*` event)
-- [ ] Add handler for `license.plan.changed`
-- [ ] Add handlers for `license.extended` / `license.shortened`
-- [ ] Add handler for `license.deleted` if applicable to this product's Freemius config
-- [ ] Verify against real/sandbox Freemius events before go-live — it's possible `install.*` events already cover some of these in practice for this vendor's specific product setup; confirm rather than assume
+- [x] Add handler for `license.created` / `payment.created` (new pro purchase not accompanied by an `install.*` event)
+- [x] Add handler for `license.plan.changed`
+- [x] Add handlers for `license.extended` / `license.shortened`
+- [x] Add handler for `license.deleted` if applicable to this product's Freemius config
+- [ ] Verify against real/sandbox Freemius events before go-live — ⚠️ pending: user hadn't created the Freemius product yet as of 2026-07-03, and in the process of setting it up surfaced the Phase 6 multi-product finding below. Code-level verification done via direct event simulation instead (see notes); real/sandbox verification still needed once the product exists.
 - Files: `includes/Services/class-stcrm-freemius-sync.php` (`process_event()`)
+
+**Implementation notes (2026-07-03):**
+- `license.created` / `payment.created` → routed through the existing `handle_license_status_change( $product_id, 'active', 'pro', $payload )` (targeted update if the contact exists, full upsert if not — this generic method already handled the "no install data" case for `license.expired`/`cancelled`, so new-purchase events reuse it directly)
+- `license.plan.changed` → new `handle_plan_changed()`: updates only `plan`, leaves `tier`/`license_status` untouched (a plan swap doesn't itself mean the license became active/inactive); silently ignores events for contacts not yet in the DB
+- `license.extended` / `license.shortened` → new `handle_license_expiry_changed()`: updates only `license_expires`, same untouched-tier/status reasoning, same silent-ignore-if-unknown behavior
+- `license.deleted` → folded into the existing `license.cancelled`/`subscription.cancelled` case (→ free/cancelled)
+- `handle_license_status_change()` extended to also set `plan` when the payload carries a non-empty `plan_name` — needed for the new-purchase path, and guarded so events that omit `plan_name` (e.g. `license.expired`) never null out a previously known plan
+- All three new/extended handlers bust the `stcrm_lv_{key_hash}` tier-resolution cache transient, since `plan`/`license_expires`/`tier` are all part of that cached API-result snapshot
+- **Verified (2026-07-03) via direct event simulation** (no Freemius product exists yet, so sandbox/real events aren't possible — instead called `STCRM_Freemius_Sync::process_event()` directly with constructed payloads for 8 scenarios): new-contact `license.created`, existing-contact `payment.created` upgrade (sites_count preserved, cache busted), `license.plan.changed` (plan only, cache busted), `license.extended`/`shortened` (expiry both directions), `license.deleted` (free/cancelled, plan preserved), `license.plan.changed` for an unknown contact (silently ignored, no row created), and a regression check confirming `license.expired` with no `plan_name` in the payload still works and does NOT null out an existing plan.
+- Plugin commit: `86dfed2` ✅ pushed (2026-07-03)
 
 ---
 
@@ -948,6 +958,40 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
+## PHASE 6 — Multi-Product Freemius Support (deferred until Phase 5 is finished)
+
+> **Status: not started — parked 2026-07-03.** Surfaced while trying to verify 5.6 (Freemius Webhook Event Coverage): the user hadn't created the Freemius product yet and, in the process of setting it up, noticed Settings only has a single Product ID field. Investigated the actual code (not just Settings UI) to confirm the real scope of the limitation before parking it. Revisit once all 11 Phase 5 gaps are closed.
+
+### The finding
+
+The DB schema was built multi-product-ready from day one — every row in `wp_stcrm_contacts` / `wp_stcrm_tickets` carries a `product_id` column, and queries are scoped by it. But the **application logic** was built for exactly one Freemius product per install, matching the original v1 spec ("built custom for SublimeTheme.com," multi-product explicitly listed as a deferred feature — see `CLAUDE.md` §21 in this repo and the plugin's own `CLAUDE.md`). That was a reasonable v1 scope call at the time, but the site currently sells 4 pro themes plus (per the user) likely more plugins in the future — so this needs to become a real feature, not a "someday."
+
+**Confirmed via code (2026-07-03), three concrete break points:**
+
+1. **Settings has exactly one credential set** — `freemius_product_id`, `freemius_secret_key`, `freemius_api_token` are single flat fields (`admin/class-stcrm-settings.php`). No way to register a second product's credentials at all today.
+2. **Webhook HMAC validation is single-secret-key-only** — `api/class-stcrm-webhook.php` decrypts and checks the signature against the *one* configured `freemius_secret_key`. A webhook from a second Freemius product (signed with its own distinct secret) fails signature validation and gets rejected with 401 — even though `STCRM_Freemius_Sync::process_event()` already reads `product_id` per-payload (`$payload['plugin_id'] ?? $payload['theme_id']`) and could route correctly across products once past that gate.
+3. **Every consumer-facing read hardcodes the one configured product_id** — confirmed via grep, every one of these reads `STCRM_Settings::get_setting('freemius_product_id')` (or the equivalent from a passed-in `$settings` array) as if there's only one product:
+   - `admin/class-stcrm-admin.php` (Inbox open-count, Thread/Contacts pages)
+   - `api/class-stcrm-admin-controller.php` (admin ticket/contact lists)
+   - `api/class-stcrm-auth-controller.php` (magic-link auth)
+   - `api/class-stcrm-tickets-controller.php` (ticket creation — tier resolution)
+   - `blocks/support-portal/render.php` (portal block)
+   - `includes/Services/class-stcrm-backfill.php` (contact backfill)
+
+   A ticket submitted about a *different* theme than whichever one is configured in Settings would get tagged with the wrong `product_id` and fail tier verification, since it'd only ever check contacts scoped to the configured product.
+
+### Recommended direction (not yet agreed / not started)
+
+- Turn the three flat Freemius credential fields into a repeatable list: `[{product_id, secret_key, api_token, label}, ...]`.
+- Fix the webhook: read `plugin_id`/`theme_id` from the payload body **before** checking the signature, look up that specific product's secret key from the list, then validate HMAC against it. This alone fixes multi-product webhook ingestion cleanly — `process_event()` already handles per-payload product_id correctly.
+- **Open design question, needs the user's call before any code:** with 4–5 products funneling into one shared support portal/launcher, does the new-ticket form need an explicit "which product is this about?" selector, or should the system infer it (match the submitted email/license key against *all* configured products)? This decides the ticket-form UX and changes `src/portal/NewTicketView.jsx` + the tier-resolution flow either way.
+
+### Next step
+
+Do not start this until Phase 5's 11 gaps are fully closed (per user instruction, 2026-07-03). When resumed, treat this as its own initiative — brainstorm/design the portal-side product-selection UX with the user before writing any code, not just the settings-array + webhook plumbing above.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -957,4 +1001,5 @@ When/if the theme goes FSE, the block already works in the default template — 
 | 3 — Touchpoints | 6–8 | 11 groups | ~40 tasks |
 | 4 — Notifications & Hardening | 9–10 | 10 groups | ~35 tasks |
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
+| 6 — Multi-Product Freemius Support | — | deferred, not scoped yet | TBD |
 | **Total** | **10 weeks + gap closure** | **50 groups** | **~190 tasks** |
