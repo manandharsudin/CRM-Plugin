@@ -467,10 +467,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 
 A full pass comparing `README.md` + `support-crm-spec.md` against the built plugin (post-Phase-4) found **11 confirmed gaps** — the 4 the README's own list called out (1 of which was already resolved during the build), plus 8 more found by independent audit. Full task-by-task plan: `phase-plan-clickup.md` Phase 5 (5.1–5.11).
 
-**Still open (from README's own list):**
-1. ~~Backfill progress meter~~ — ✅ **Resolved 2026-07-03** (see below)
-2. ~~`stcrm_manage_tickets` capability assignment UI~~ — ✅ **Resolved 2026-07-03** (see below)
-3. **Launcher docs-deflection link** — spec §9.1; portal sidebar card has it, launcher panel doesn't
+**All 4 of the README's own "known design gaps" are now resolved** (1 was already fixed pre-audit; 3 closed via 5.1–5.3 below). 8 gaps remain, all found by the independent 2026-07-03 audit (not on README's own list):
 
 **Resolved during the build (was on README's list, no longer a gap):**
 - "Delete all data on uninstall" toggle — `delete_on_uninstall` setting exists (Tickets tab), wired to `uninstall.php`
@@ -492,6 +489,8 @@ These are additive — nothing here blocks current functionality. Everything els
 A post-implementation code review found 5 issues; 4 were fixed in the same commit (JS/PHP error-label mismatch on live poll, blank progress text during page-1 processing, missing defensive `return` in `ajax_status()`, no `document.hidden` pause on the poller). One was flagged but not fixed: the new AJAX endpoint uses its own auth check instead of the plugin's established REST + `authenticate_admin()` pattern — a design call, not a bug, left for a future revisit.
 
 **Resolved 2026-07-03 — Capability Assignment UI (5.2), plugin commit `46efc43`:** New "Support Access" row on Settings → Tickets & Guards — a checkbox per registered WP role (Administrator shown checked + disabled, always granted). `STCRM_Settings::get_support_roles()` reads current grants; `sync_support_roles()` grants/revokes via `WP_Role::add_cap()`/`remove_cap()` on save, iterating only real registered roles (never trusts posted role names directly). `uninstall.php` already stripped the capability from every role on uninstall, so no changes needed there. Verified via Playwright: grant/persist/revoke round-trip confirmed with `wp eval`, other Tickets-tab fields unaffected.
+
+**Resolved 2026-07-03 — Launcher Docs-Deflection Link (5.3), plugin commit `f162c15`:** New `docs_url` setting (Tickets & Guards tab). Both the launcher's no-session view and the portal's New Ticket sidebar show a "Check our docs first"/"Search the docs" link when set, omitted entirely otherwise. Also fixed a bonus bug found mid-implementation: the portal's docs button had no `href`/`onClick` at all (dead markup) — now wired to the same setting. Rebuilt `stcrm-portal.js` + `stcrm-launcher.js`. Verified via Playwright: link renders with correct `href` on both surfaces when configured, disappears cleanly from both when cleared.
 
 ---
 

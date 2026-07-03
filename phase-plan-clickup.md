@@ -822,11 +822,20 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.3 Launcher Docs-Deflection Link (known gap — README item 4)
+### 5.3 Launcher Docs-Deflection Link ✅ Complete (2026-07-03, known gap — README item 4)
 
-- [ ] Add a "Check our docs first" link/card to the launcher panel's no-session view (portal's New Ticket sidebar already has this card; launcher doesn't)
-- [ ] Needs a docs URL source — add a `docs_url` setting (Email tab or new field) or confirm an existing constant/option to reuse
-- Files: `src/launcher/Launcher.jsx`, `admin/class-stcrm-settings.php` (if new setting needed)
+- [x] Add a "Check our docs first" link/card to the launcher panel's no-session view (portal's New Ticket sidebar already has this card; launcher doesn't)
+- [x] Needs a docs URL source — add a `docs_url` setting (Email tab or new field) or confirm an existing constant/option to reuse
+- Files: `src/launcher/Launcher.jsx`, `admin/class-stcrm-settings.php`, `blocks/support-portal/render.php`, `includes/class-stcrm-launcher.php`, `src/portal/NewTicketView.jsx`
+
+**Implementation notes (2026-07-03):**
+- New `docs_url` setting added to `STCRM_Settings::$defaults` (empty by default) and a "Documentation URL" field on the Tickets & Guards tab, right after Categories
+- `docsUrl` added to both localization points: `blocks/support-portal/render.php`'s `stcrmPortal` object and `STCRM_Launcher::enqueue()`'s `stcrmLauncher` object
+- `src/launcher/Launcher.jsx`: added a `doc` icon to the launcher's self-contained icon set; `NoSessionView` now renders a "Check our docs first" link above the form when `window.stcrmLauncher.docsUrl` is truthy, omitted entirely otherwise
+- **Bonus fix discovered mid-implementation:** the portal's own "Search the docs" button (`src/portal/NewTicketView.jsx`, sidebar "Before you post" card) had no `href` or `onClick` at all — it was dead markup despite the README describing it as already working. Wired it to the same `docsUrl` setting (now a real `<a target="_blank">`), and the whole card only renders when `docsUrl` is set (previously always rendered, non-functional when clicked)
+- Rebuilt `stcrm-portal.js` + `stcrm-launcher.js` via `npm run build`
+- **Verified via Playwright (2026-07-03):** with `docs_url` configured — portal docs card renders with a working `href`, launcher shows the docs link with the same `href`. With `docs_url` cleared — both disappear cleanly (no dead links left behind). No new console errors (pre-existing anonymous 401s on session-check calls, unrelated to this change).
+- Plugin commit: `f162c15` ✅ pushed (2026-07-03)
 
 ---
 
