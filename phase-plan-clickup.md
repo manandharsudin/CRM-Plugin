@@ -770,6 +770,131 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
+## PHASE 5 — Design-Handoff Gap Closure
+
+> Goal: close every gap between `design_handoff_support_crm/README.md` + `support-crm-spec.md` and the built plugin. Found via a full audit on 2026-07-03 (Phases 1–4 were already complete + a post-4.7 QA hardening pass, commit `08f5d78`).
+> 11 confirmed gaps total: 3 the README's own "known design gaps" list already called out, 8 found by the independent audit. Address one group at a time; each is independently shippable.
+
+---
+
+### 5.1 Backfill Progress Meter (known gap — README item 1)
+
+- [ ] Expose richer backfill status from `STCRM_Backfill`: current page, and total pages/records if the Freemius API response provides a count
+- [ ] Render a progress meter in Settings → Freemius tab (below the "Run Backfill" button): status (`idle`/`running`/`completed`/`error_*`), current page, percentage or "page N" if total unknown
+- [ ] Meter must reflect a resumable job — reloading the Settings page while backfill is running should show current progress, not reset
+- Files: `admin/class-stcrm-settings.php`, `includes/Services/class-stcrm-backfill.php`
+
+---
+
+### 5.2 Capability Assignment UI (known gap — README item 2)
+
+- [ ] Add a control (Settings → Tickets & Guards tab) to assign `stcrm_manage_tickets` to roles beyond Administrator (e.g. checkboxes per role, or a multi-select)
+- [ ] On save: `WP_Role::add_cap('stcrm_manage_tickets')` for checked roles, `remove_cap()` for unchecked — Administrator should stay locked/always-on since Phase 1 grants it on activation
+- [ ] `includes/class-stcrm-activator.php` currently only grants the cap once at activation — this UI is the first way to change it afterward
+- Files: `admin/class-stcrm-settings.php`, `includes/class-stcrm-activator.php`
+
+---
+
+### 5.3 Launcher Docs-Deflection Link (known gap — README item 4)
+
+- [ ] Add a "Check our docs first" link/card to the launcher panel's no-session view (portal's New Ticket sidebar already has this card; launcher doesn't)
+- [ ] Needs a docs URL source — add a `docs_url` setting (Email tab or new field) or confirm an existing constant/option to reuse
+- Files: `src/launcher/Launcher.jsx`, `admin/class-stcrm-settings.php` (if new setting needed)
+
+---
+
+### 5.4 Admin Assignee Controls (highest impact — no UI exists at all today)
+
+- [ ] Thread → Manage panel: add an Assignee `<select>` populated with users who hold `stcrm_manage_tickets`, wired to the existing `PATCH /admin/tickets/{id}` `assigned_to` field (backend already supports this — `null` = unassign)
+- [ ] Inbox filter toolbar: render the Assignee `<select>` (All/Me/Unassigned) in PHP — `src/admin/inbox.jsx` already has a listener wired to `#stcrm-filter-assignee`, it's dead code today because the element is never rendered
+- [ ] Confirm `GET /admin/tickets?assignee=` REST param still works end-to-end once the UI sends it
+- Files: `src/admin/thread.jsx` (ManagePanel), `admin/class-stcrm-admin.php` (render_inbox_page), `src/admin/inbox.jsx`
+
+---
+
+### 5.5 Inbox Search Box
+
+- [ ] Add search input to Inbox filter toolbar: "Search subject or email…"
+- [ ] Wire JS to include a `search` param on fetch/filter-change
+- [ ] Add `search` param to `GET /admin/tickets` REST args in the admin controller
+- [ ] Add `LIKE` search over ticket subject + contact email to `STCRM_Database::get_admin_tickets()` WHERE clause (currently only status/priority/tier/assignee are filterable)
+- Files: `admin/class-stcrm-admin.php`, `src/admin/inbox.jsx`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php` (or wherever `get_admin_tickets()` lives)
+
+---
+
+### 5.6 Freemius Webhook Event Coverage
+
+- [ ] Add handler for `license.created` / `payment.created` (new pro purchase not accompanied by an `install.*` event)
+- [ ] Add handler for `license.plan.changed`
+- [ ] Add handlers for `license.extended` / `license.shortened`
+- [ ] Add handler for `license.deleted` if applicable to this product's Freemius config
+- [ ] Verify against real/sandbox Freemius events before go-live — it's possible `install.*` events already cover some of these in practice for this vendor's specific product setup; confirm rather than assume
+- Files: `includes/Services/class-stcrm-freemius-sync.php` (`process_event()`)
+
+---
+
+### 5.7 Thread Sidebar — Customer Panel Completeness
+
+- [ ] Add a distinct "License active" badge (separate from the Tier badge) per README spec
+- [ ] Render `license_expires` ("Expires") — already returned by the admin ticket API, just not read by the component
+- [ ] Render `created_at` ("Customer since") — same, already available, not rendered
+- [ ] Add footer note "Synced from Freemius · read-only"
+- [ ] Masked license key (`sk_live_••••a31f`) — **not implementable as spec'd**: only `license_key_hash` (SHA-256) is stored, not a reversible/maskable raw key. Skip, or replace with a "License key on file" boolean indicator instead
+- Files: `src/admin/thread.jsx` (CustomerPanel)
+
+---
+
+### 5.8 Thread Header Completeness
+
+- [ ] Add category badge to the Thread header (currently only Tier/Status/Priority render)
+- [ ] Add "Assigned to you" indicator to the Thread header — depends on 5.4 landing first (assignee data needs to be in the component's ticket state)
+- Files: `src/admin/thread.jsx`
+
+---
+
+### 5.9 Inbox List Pane Header Row
+
+- [ ] Add the missing header row above the ticket list: "N tickets" (count) + "Sort: Smart" label
+- Files: `src/admin/inbox.jsx` (TicketList)
+
+---
+
+### 5.10 `POST /tickets` Response — `thread_url` Field
+
+- [ ] Replace the hardcoded `null` (still has a `// Phase 3: populate once portal page URL is known.` placeholder comment) with a real resolved portal/thread URL
+- [ ] Reuse the existing portal-URL resolution logic already used elsewhere (`STCRM_Auth_Controller::get_portal_url()` / `STCRM_Mailer::get_portal_url()` — both query `post_content LIKE '%wp:sublime-crm/support-portal%'`)
+- Files: `api/class-stcrm-tickets-controller.php` (line ~281)
+
+---
+
+### 5.11 Contact Detail — "Lifetime Value" Field (low priority / spec-only)
+
+- [ ] Decide whether to build this: `wp_stcrm_contacts` has no backing column and `support-crm-spec.md` §3.1 never defines this field either — it appears to be a README-only concept with no data source anywhere in the spec
+- [ ] If proceeding: define what "lifetime value" means (sum of Freemius payments? needs a new Freemius API call or webhook-driven running total), add storage + a way to populate it, then render on Contact Detail profile card
+- [ ] If not proceeding: mark as intentionally out of scope and note it in this doc so it isn't rediscovered as a "gap" later
+- Files: TBD pending the scope decision above
+
+---
+
+### Notes — judgment calls surfaced by the audit (not counted in the 11 gaps, no action required unless decided otherwise)
+
+- **Launcher's compact no-session form has no honeypot field** (portal's `NewTicketView` does). Spec §10 says "honeypot on widget/portal forms" — ambiguous whether "widget" means this launcher or a separate out-of-scope widget. Backend rate limiting still applies regardless of this gap.
+- **Default ticket categories** use full names (`Technical Support, Billing, …`) vs. the spec's literal lowercase example (`technical, billing, …`) — internally consistent throughout (Settings/validation/portal all agree), purely cosmetic vs. the spec text.
+
+---
+
+### Phase 5 Acceptance
+
+- [ ] All 11 confirmed gaps above resolved or explicitly marked out-of-scope with reasoning (5.11)
+- [ ] Backfill progress visible and accurate during a real/sandbox run
+- [ ] A non-Administrator role can be granted `stcrm_manage_tickets` and use the Inbox/Thread/Contacts pages
+- [ ] Agent can assign and reassign tickets from both Inbox filter and Thread Manage panel
+- [ ] Inbox search returns correct results by subject and by contact email
+- [ ] Freemius sandbox events for all newly-handled event types correctly update contact tier/plan/expiry
+- [ ] `POST /tickets` response `thread_url` resolves to a working link
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -778,4 +903,5 @@ When/if the theme goes FSE, the block already works in the default template — 
 | 2 — Tickets Core | 3–5 | 10 groups | ~45 tasks |
 | 3 — Touchpoints | 6–8 | 11 groups | ~40 tasks |
 | 4 — Notifications & Hardening | 9–10 | 10 groups | ~35 tasks |
-| **Total** | **10 weeks** | **39 groups** | **~155 tasks** |
+| 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
+| **Total** | **10 weeks + gap closure** | **50 groups** | **~190 tasks** |
