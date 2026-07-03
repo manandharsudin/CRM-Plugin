@@ -469,7 +469,7 @@ A full pass comparing `README.md` + `support-crm-spec.md` against the built plug
 
 **Still open (from README's own list):**
 1. ~~Backfill progress meter~~ — ✅ **Resolved 2026-07-03** (see below)
-2. **`stcrm_manage_tickets` capability assignment UI** — spec §9; capability only granted to Administrator at activation, no way to assign to other roles
+2. ~~`stcrm_manage_tickets` capability assignment UI~~ — ✅ **Resolved 2026-07-03** (see below)
 3. **Launcher docs-deflection link** — spec §9.1; portal sidebar card has it, launcher panel doesn't
 
 **Resolved during the build (was on README's list, no longer a gap):**
@@ -490,6 +490,8 @@ These are additive — nothing here blocks current functionality. Everything els
 **Resolved 2026-07-03 — Backfill progress meter (5.1), plugin commit `2e47f66`:** `STCRM_Backfill` now tracks a `stcrm_backfill_total` option (from the Freemius API's `total` field) alongside the existing last-page option; `get_progress()` returns `{status, page, total, processed, percent}`. Settings → Freemius tab renders a live progress bar + status line, kept current via a new `wp_ajax_stcrm_backfill_status` AJAX endpoint polled every 3s by `admin/js/stcrm-settings.js` while the job is `running` (self-stops otherwise, pauses while the tab is hidden). Verified end-to-end via Playwright with an injected admin session (no password needed) and a simulated running state — see `phase-plan-clickup.md` 5.1 for full details.
 
 A post-implementation code review found 5 issues; 4 were fixed in the same commit (JS/PHP error-label mismatch on live poll, blank progress text during page-1 processing, missing defensive `return` in `ajax_status()`, no `document.hidden` pause on the poller). One was flagged but not fixed: the new AJAX endpoint uses its own auth check instead of the plugin's established REST + `authenticate_admin()` pattern — a design call, not a bug, left for a future revisit.
+
+**Resolved 2026-07-03 — Capability Assignment UI (5.2), plugin commit `46efc43`:** New "Support Access" row on Settings → Tickets & Guards — a checkbox per registered WP role (Administrator shown checked + disabled, always granted). `STCRM_Settings::get_support_roles()` reads current grants; `sync_support_roles()` grants/revokes via `WP_Role::add_cap()`/`remove_cap()` on save, iterating only real registered roles (never trusts posted role names directly). `uninstall.php` already stripped the capability from every role on uninstall, so no changes needed there. Verified via Playwright: grant/persist/revoke round-trip confirmed with `wp eval`, other Tickets-tab fields unaffected.
 
 ---
 

@@ -804,12 +804,21 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.2 Capability Assignment UI (known gap — README item 2)
+### 5.2 Capability Assignment UI ✅ Complete (2026-07-03, known gap — README item 2)
 
-- [ ] Add a control (Settings → Tickets & Guards tab) to assign `stcrm_manage_tickets` to roles beyond Administrator (e.g. checkboxes per role, or a multi-select)
-- [ ] On save: `WP_Role::add_cap('stcrm_manage_tickets')` for checked roles, `remove_cap()` for unchecked — Administrator should stay locked/always-on since Phase 1 grants it on activation
-- [ ] `includes/class-stcrm-activator.php` currently only grants the cap once at activation — this UI is the first way to change it afterward
-- Files: `admin/class-stcrm-settings.php`, `includes/class-stcrm-activator.php`
+- [x] Add a control (Settings → Tickets & Guards tab) to assign `stcrm_manage_tickets` to roles beyond Administrator (e.g. checkboxes per role, or a multi-select)
+- [x] On save: `WP_Role::add_cap('stcrm_manage_tickets')` for checked roles, `remove_cap()` for unchecked — Administrator should stay locked/always-on since Phase 1 grants it on activation
+- [x] `includes/class-stcrm-activator.php` currently only grants the cap once at activation — this UI is the first way to change it afterward
+- Files: `admin/class-stcrm-settings.php`, `admin/css/stcrm-admin.css`, `CLAUDE.md` (`includes/class-stcrm-activator.php` unchanged — still only handles the one-time activation grant)
+
+**Implementation notes (2026-07-03):**
+- New "Support Access" row on the Tickets & Guards tab, above the Guard matrix fields: one checkbox per role from `wp_roles()->get_names()` (excluding Administrator, which shows checked + `disabled` with a "(always granted)" note)
+- `STCRM_Settings::get_support_roles()` — returns non-Administrator role keys that currently `has_cap('stcrm_manage_tickets')`, used to render checked state on load
+- `STCRM_Settings::sync_support_roles(array $enabled_roles)` (private) — called from `handle_save()`'s `tickets` case; iterates `wp_roles()->get_names()` (skipping Administrator) and calls `add_cap()`/`remove_cap()` per role based on whether its key is in the posted (sanitize_key'd) array. Never looks up a role by an arbitrary posted string — only real registered roles are ever touched.
+- Role capability state lives on the roles themselves (`wp_user_roles` option via `WP_Roles`), not inside the `stcrm_settings` option array — kept separate from the rest of the save-handler's field assignments
+- `uninstall.php` already loops over every registered role removing `stcrm_manage_tickets` (built in Phase 1/4.8), so no uninstall changes were needed — any role granted access via this UI is already cleaned up correctly
+- **Verified via Playwright (2026-07-03):** Administrator checkbox checked+disabled; Editor checkbox starts unchecked, checking + save grants the capability (confirmed via `wp eval` `has_cap()`), reload shows the checkbox still checked, unchecking + save revokes it (confirmed via `wp eval` again), and other Tickets-tab fields (e.g. `guard_free_open`) were unaffected by the save cycle. Zero console errors.
+- Plugin commit: `46efc43` ✅ pushed (2026-07-03)
 
 ---
 
