@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-06-27 (QA fixes applied: portal-URL transient cache + save_post bust, email header injection prevention, esc_like in Launcher, salt-rotation admin notice, dead ViewStub removed, auto-close insert error guard)
+> Last updated: 2026-07-03 (Phase 5 added to phase-plan-clickup.md, commit `c19a0ce` — full audit against design handoff found 11 gaps; see §18 and §17)
 
 ---
 
@@ -459,17 +459,33 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 | 2 — Tickets core | ✅ Complete (2026-06-25) | REST API (public + admin routes), guard matrix, admin inbox + thread UI + contacts UI | Full conversation round-trip via REST client; guards return 409/423 correctly per tier |
 | 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
 | 4 — Notifications & hardening | ✅ Complete (2026-06-27) | 4.1–4.8 ✅ complete. 4.9 = production ops (no code). 4.10 = removed. QA pass applied: portal-URL transient cache (DAY_IN_SECONDS, bust on save_post), email header injection prevention (CR/LF strip), esc_like added to Launcher, salt-rotation warning in Settings (Freemius tab), dead ViewStub removed from portal App.jsx, auto-close insert error guard. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
+| 5 — Design-Handoff Gap Closure | 🔄 In progress (started 2026-07-03) | 11 confirmed gaps found via full audit vs. design handoff (see §18). Full task breakdown in `phase-plan-clickup.md` Phase 5 (5.1–5.11). | All 11 gaps resolved or explicitly marked out-of-scope with reasoning |
 
 ---
 
-## 18. Known Design Gaps (spec has these, design doesn't yet)
+## 18. Known Gaps vs. Design Handoff (full audit 2026-07-03)
 
+A full pass comparing `README.md` + `support-crm-spec.md` against the built plugin (post-Phase-4) found **11 confirmed gaps** — the 4 the README's own list called out (1 of which was already resolved during the build), plus 8 more found by independent audit. Full task-by-task plan: `phase-plan-clickup.md` Phase 5 (5.1–5.11).
+
+**Still open (from README's own list):**
 1. **Backfill progress meter** — Settings only shows the trigger button; spec §6.3 requires resumable progress display
-2. **"Delete all data on uninstall" toggle** — spec §10; not in Settings screen design yet
-3. **`stcrm_manage_tickets` capability assignment UI** — spec §9; not in Settings yet
-4. **Launcher docs-deflection link** — spec §9.1; portal sidebar card has it, launcher panel doesn't
+2. **`stcrm_manage_tickets` capability assignment UI** — spec §9; capability only granted to Administrator at activation, no way to assign to other roles
+3. **Launcher docs-deflection link** — spec §9.1; portal sidebar card has it, launcher panel doesn't
 
-These are additive. Everything else in the spec has a corresponding design.
+**Resolved during the build (was on README's list, no longer a gap):**
+- "Delete all data on uninstall" toggle — `delete_on_uninstall` setting exists (Tickets tab), wired to `uninstall.php`
+
+**Found by the 2026-07-03 audit (not on README's own list):**
+4. **No Assignee UI anywhere in admin** — backend (`PATCH /admin/tickets/{id}` `assigned_to`) works, but Thread's Manage panel has no Assignee select, and Inbox's Assignee filter is dead JS (listens for an element PHP never renders)
+5. **Inbox search box** — not built anywhere in the stack (UI, REST args, or SQL)
+6. **Freemius webhook missing event types** — `license.created`/`payment.created`, `license.plan.changed`, `license.extended`/`shortened`, `license.deleted` all fall through to a silent no-op
+7. **Thread sidebar Customer panel missing fields** — License-active badge, Expires, Customer since, footer note (data already in the API response, just not rendered)
+8. **Thread header missing category badge + "Assigned to you" indicator**
+9. **Inbox list pane missing header row** ("N tickets" / "Sort: Smart")
+10. **`POST /tickets` response `thread_url` hardcoded `null`** — Phase-3 placeholder never wired up even though the portal-URL resolver exists elsewhere in the codebase
+11. **Contact detail "Lifetime value" field** — likely spec-only; no DB column or spec-defined data source exists anywhere, judgment call on whether to build it at all
+
+These are additive — nothing here blocks current functionality. Everything else in the spec has a corresponding, verified implementation.
 
 ---
 
