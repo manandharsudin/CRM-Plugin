@@ -468,7 +468,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 A full pass comparing `README.md` + `support-crm-spec.md` against the built plugin (post-Phase-4) found **11 confirmed gaps** — the 4 the README's own list called out (1 of which was already resolved during the build), plus 8 more found by independent audit. Full task-by-task plan: `phase-plan-clickup.md` Phase 5 (5.1–5.11).
 
 **Still open (from README's own list):**
-1. **Backfill progress meter** — Settings only shows the trigger button; spec §6.3 requires resumable progress display
+1. ~~Backfill progress meter~~ — ✅ **Resolved 2026-07-03** (see below)
 2. **`stcrm_manage_tickets` capability assignment UI** — spec §9; capability only granted to Administrator at activation, no way to assign to other roles
 3. **Launcher docs-deflection link** — spec §9.1; portal sidebar card has it, launcher panel doesn't
 
@@ -486,6 +486,10 @@ A full pass comparing `README.md` + `support-crm-spec.md` against the built plug
 11. **Contact detail "Lifetime value" field** — likely spec-only; no DB column or spec-defined data source exists anywhere, judgment call on whether to build it at all
 
 These are additive — nothing here blocks current functionality. Everything else in the spec has a corresponding, verified implementation.
+
+**Resolved 2026-07-03 — Backfill progress meter (5.1), plugin commit `2e47f66`:** `STCRM_Backfill` now tracks a `stcrm_backfill_total` option (from the Freemius API's `total` field) alongside the existing last-page option; `get_progress()` returns `{status, page, total, processed, percent}`. Settings → Freemius tab renders a live progress bar + status line, kept current via a new `wp_ajax_stcrm_backfill_status` AJAX endpoint polled every 3s by `admin/js/stcrm-settings.js` while the job is `running` (self-stops otherwise, pauses while the tab is hidden). Verified end-to-end via Playwright with an injected admin session (no password needed) and a simulated running state — see `phase-plan-clickup.md` 5.1 for full details.
+
+A post-implementation code review found 5 issues; 4 were fixed in the same commit (JS/PHP error-label mismatch on live poll, blank progress text during page-1 processing, missing defensive `return` in `ajax_status()`, no `document.hidden` pause on the poller). One was flagged but not fixed: the new AJAX endpoint uses its own auth check instead of the plugin's established REST + `authenticate_admin()` pattern — a design call, not a bug, left for a future revisit.
 
 ---
 

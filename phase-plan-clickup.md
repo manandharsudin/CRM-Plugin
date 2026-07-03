@@ -777,12 +777,30 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.1 Backfill Progress Meter (known gap — README item 1)
+### 5.1 Backfill Progress Meter ✅ Complete (2026-07-03, known gap — README item 1)
 
-- [ ] Expose richer backfill status from `STCRM_Backfill`: current page, and total pages/records if the Freemius API response provides a count
-- [ ] Render a progress meter in Settings → Freemius tab (below the "Run Backfill" button): status (`idle`/`running`/`completed`/`error_*`), current page, percentage or "page N" if total unknown
-- [ ] Meter must reflect a resumable job — reloading the Settings page while backfill is running should show current progress, not reset
+- [x] Expose richer backfill status from `STCRM_Backfill`: current page, and total pages/records if the Freemius API response provides a count
+- [x] Render a progress meter in Settings → Freemius tab (below the "Run Backfill" button): status (`idle`/`running`/`completed`/`error_*`), current page, percentage or "page N" if total unknown
+- [x] Meter must reflect a resumable job — reloading the Settings page while backfill is running should show current progress, not reset
 - Files: `admin/class-stcrm-settings.php`, `includes/Services/class-stcrm-backfill.php`
+
+**Implementation notes (2026-07-03):**
+- `STCRM_Backfill`: added `TOTAL_KEY` option (`stcrm_backfill_total`), stored from the Freemius API's `total` field on each page fetch; reset alongside `OPTION_KEY` on `handle_trigger()`. Added `get_total()`, `get_progress()` (returns `{status, page, total, processed, percent}` — `percent` is `null` when total isn't known yet), and `ajax_status()` (AJAX handler: `check_ajax_referer` + `stcrm_manage_tickets` capability check, `wp_send_json_success(get_progress())`).
+- New AJAX hook `wp_ajax_stcrm_backfill_status` wired in `class-sublime-crm.php` `define_api_hooks()`.
+- `STCRM_Settings::render_page()`: replaced the plain status text with a `#stcrm-backfill-progress` container (data-attributes carry initial state) rendered via new private `render_backfill_progress_markup()` — a status line + conditional progress bar (only shown while `running` and total is known).
+- `STCRM_Admin::enqueue_assets()`: added `wp_localize_script('stcrm-settings', 'stcrmSettings', {...})` with ajaxUrl, nonce, and i18n strings (JS re-renders using `{token}`-style placeholders, not printf, since it's plain string replace client-side).
+- `admin/js/stcrm-settings.js`: added a self-contained poller — starts only if the container's initial `data-status` is `running`, polls `admin-ajax.php` every 3s via `fetch`, re-renders the same markup shape client-side, stops once status leaves `running`. Network errors retry on the next tick rather than freezing the meter.
+- CSS: `.stcrm-backfill-progress`, `.stcrm-progress-bar` (track) + `.stcrm-progress-bar__fill` (blue `#2271b1` fill, width transition), `.stcrm-backfill-error` (red mono text) added to `admin/css/stcrm-admin.css`.
+- **Verified (2026-07-03):** PHP syntax-checked (all 4 touched files, `php -l` clean). `wp eval` confirmed `render_page()` produces no fatals and includes the progress container. Playwright end-to-end (injected valid WP auth cookies for an existing admin user via `wp_generate_auth_cookie()` — no password needed, no destructive changes): simulated a `running` state (page 2, total 130) → page loaded with correct 77% bar + text ("100 of 130 contacts processed (page 2)"), live AJAX call returned matching JSON, JS poller re-rendered identically after one 3s cycle, zero console errors. Backfill options restored to original `error_missing_credentials` state after the test (no real Freemius credentials configured locally).
+
+**Post-implementation code review (2026-07-03) — 5 findings, 4 fixed before commit:**
+- [x] **Fix:** JS poller's error-status label only matched exact `idle`/`running`/`completed`/`error` keys, unlike PHP's `str_starts_with($status,'error')` handling — a live poll during a real error (e.g. `error_api: ...`) rendered the raw untranslated status duplicated instead of a clean "Error" label. `renderBackfillProgress()` in `stcrm-settings.js` now checks `data.status.indexOf('error') === 0` the same way, using `i18n.error` for the label and appending the raw detail once.
+- [x] **Fix:** `TOTAL_KEY`/page ordering meant a poll landing between "total fetched" and "page 1 fully processed" showed a blank status line (page>0 gate hid the processed count) with an unlabeled 0%-width bar. Both PHP (`render_backfill_progress_markup()`) and JS (`renderBackfillProgress()`) now key the processed-count text off `total > 0` first, showing "0 of N contacts processed" instead of nothing. Added `i18n.withoutPage` string for this case.
+- [x] **Fix:** defensive `return;` added after the 403 branch in `STCRM_Backfill::ajax_status()` — previously relied entirely on `wp_send_json_error()`'s internal `wp_die()` to stop execution.
+- [x] **Fix:** JS poller now pauses while `document.hidden` and resumes immediately on `visibilitychange`, matching the existing `src/portal/polling.js` `createPoller` convention (previously polled every 3s indefinitely regardless of tab visibility).
+- **Not fixed (flagged, not actioned):** the new `wp_ajax_stcrm_backfill_status` endpoint uses its own auth mechanism (`check_ajax_referer` + inline `current_user_can()`) instead of the plugin's established `stcrm/v1` REST + `STCRM_Session_Auth::authenticate_admin()` pattern. This is a design/architecture judgment call, not a bug — left as-is; revisit if a future security hardening pass touches admin auth.
+- **Re-verified via Playwright (2026-07-03) after fixes** — using `waitForFunction` instead of fixed delays to avoid racing wp-cli's WP-bootstrap time against the 3s poll interval: confirmed (a) `error_api: Freemius API returned HTTP 500` renders as `Status: Error — error_api: Freemius API returned HTTP 500` via live poll (no duplication), (b) `page:null,total:130` renders `0 of 130 contacts processed` (no blank state), (c) zero `admin-ajax.php` requests fired while tab was simulated hidden (measured via Playwright request-count, not just DOM state), and the meter updated to `completed` immediately on visibility restore. Zero console errors.
+- Plugin commit: `2e47f66` ✅ pushed (2026-07-03) — all 5.1 work + the 4 fixes above, bundled in one commit.
 
 ---
 
@@ -886,7 +904,7 @@ When/if the theme goes FSE, the block already works in the default template — 
 ### Phase 5 Acceptance
 
 - [ ] All 11 confirmed gaps above resolved or explicitly marked out-of-scope with reasoning (5.11)
-- [ ] Backfill progress visible and accurate during a real/sandbox run
+- [ ] Backfill progress visible and accurate during a real/sandbox run — ⚠️ pending real Freemius credentials (code complete; verified 2026-07-03 with a simulated running state via Playwright — see 5.1 implementation notes)
 - [ ] A non-Administrator role can be granted `stcrm_manage_tickets` and use the Inbox/Thread/Contacts pages
 - [ ] Agent can assign and reassign tickets from both Inbox filter and Thread Manage panel
 - [ ] Inbox search returns correct results by subject and by contact email
