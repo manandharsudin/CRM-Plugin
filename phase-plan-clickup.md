@@ -839,12 +839,21 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.4 Admin Assignee Controls (highest impact — no UI exists at all today)
+### 5.4 Admin Assignee Controls ✅ Complete (2026-07-03, highest impact — no UI existed at all before this)
 
-- [ ] Thread → Manage panel: add an Assignee `<select>` populated with users who hold `stcrm_manage_tickets`, wired to the existing `PATCH /admin/tickets/{id}` `assigned_to` field (backend already supports this — `null` = unassign)
-- [ ] Inbox filter toolbar: render the Assignee `<select>` (All/Me/Unassigned) in PHP — `src/admin/inbox.jsx` already has a listener wired to `#stcrm-filter-assignee`, it's dead code today because the element is never rendered
-- [ ] Confirm `GET /admin/tickets?assignee=` REST param still works end-to-end once the UI sends it
-- Files: `src/admin/thread.jsx` (ManagePanel), `admin/class-stcrm-admin.php` (render_inbox_page), `src/admin/inbox.jsx`
+- [x] Thread → Manage panel: add an Assignee `<select>` populated with users who hold `stcrm_manage_tickets`, wired to the existing `PATCH /admin/tickets/{id}` `assigned_to` field (backend already supports this — `null` = unassign)
+- [x] Inbox filter toolbar: render the Assignee `<select>` (All/Unassigned/named agents — see note below on "Me") in PHP — `src/admin/inbox.jsx` already had a listener wired to `#stcrm-filter-assignee`, it was dead code before this because the element was never rendered
+- [x] Confirm `GET /admin/tickets?assignee=` REST param still works end-to-end once the UI sends it
+- Files: `src/admin/thread.jsx` (ManagePanel), `admin/class-stcrm-admin.php` (render_inbox_page + new `get_agents()` helper), `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`
+
+**Implementation notes (2026-07-03):**
+- New `STCRM_Admin::get_agents(): array` (static) — `get_users(['capability' => 'stcrm_manage_tickets', ...])`, returns `[{id, name}]` sorted by display name. Shared by both the Inbox filter and the Thread Manage panel.
+- `GET /admin/tickets?assignee=` extended to accept the keywords `me` (→ `get_current_user_id()`) and `unassigned` (→ `assigned_to IS NULL`), in addition to a plain numeric user ID. REST arg schema loosened from `type: integer` to `type: string` to allow the keywords through.
+- `STCRM_Database::get_admin_tickets()` — `assignee` filter special-cases `'unassigned'` to `assigned_to IS NULL`; numeric values still bind as `%d` via `$wpdb->prepare()`.
+- `src/admin/thread.jsx` `ManagePanel`: new Assignee `<select>` (Unassigned + `window.stcrmThread.agents`), included in the existing `patch()` PATCH call alongside status/priority. `stcrmThread` localization gained `agents` + `currentUser`.
+- **Design change during review:** initially added a "Me" option to the Inbox Assignee dropdown per the README's literal "All/Me/Unassigned" wording, and built the `me` keyword server-side to support it. User caught that this was redundant in a screenshot review — the current user already appears in the dropdown by name (e.g. "sudin"), so a separate "Me" shortcut just duplicated an existing entry. Removed the "Me" `<option>` from the Inbox dropdown; kept the `me` keyword server-side (harmless, doesn't hurt to leave working REST support in place even without a dedicated UI trigger for it).
+- **Verified via Playwright (2026-07-03):** Thread panel — assignee select starts on Unassigned, lists all 3 eligible agents, assigning + saving updates the DB and persists after reload, unassigning correctly nulls it out. Inbox — filter dropdown shows All/Unassigned/named agents (no Me); direct REST checks confirmed `?assignee=me`, `?assignee=unassigned`, and `?assignee=1` (numeric) all return the correct ticket sets. Zero console errors.
+- Plugin commit: `b4cf9b2` ✅ pushed (2026-07-03)
 
 ---
 

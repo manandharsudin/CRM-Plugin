@@ -473,7 +473,7 @@ A full pass comparing `README.md` + `support-crm-spec.md` against the built plug
 - "Delete all data on uninstall" toggle — `delete_on_uninstall` setting exists (Tickets tab), wired to `uninstall.php`
 
 **Found by the 2026-07-03 audit (not on README's own list):**
-4. **No Assignee UI anywhere in admin** — backend (`PATCH /admin/tickets/{id}` `assigned_to`) works, but Thread's Manage panel has no Assignee select, and Inbox's Assignee filter is dead JS (listens for an element PHP never renders)
+4. ~~No Assignee UI anywhere in admin~~ — ✅ **Resolved 2026-07-03** (see below)
 5. **Inbox search box** — not built anywhere in the stack (UI, REST args, or SQL)
 6. **Freemius webhook missing event types** — `license.created`/`payment.created`, `license.plan.changed`, `license.extended`/`shortened`, `license.deleted` all fall through to a silent no-op
 7. **Thread sidebar Customer panel missing fields** — License-active badge, Expires, Customer since, footer note (data already in the API response, just not rendered)
@@ -491,6 +491,8 @@ A post-implementation code review found 5 issues; 4 were fixed in the same commi
 **Resolved 2026-07-03 — Capability Assignment UI (5.2), plugin commit `46efc43`:** New "Support Access" row on Settings → Tickets & Guards — a checkbox per registered WP role (Administrator shown checked + disabled, always granted). `STCRM_Settings::get_support_roles()` reads current grants; `sync_support_roles()` grants/revokes via `WP_Role::add_cap()`/`remove_cap()` on save, iterating only real registered roles (never trusts posted role names directly). `uninstall.php` already stripped the capability from every role on uninstall, so no changes needed there. Verified via Playwright: grant/persist/revoke round-trip confirmed with `wp eval`, other Tickets-tab fields unaffected.
 
 **Resolved 2026-07-03 — Launcher Docs-Deflection Link (5.3), plugin commit `f162c15`:** New `docs_url` setting (Tickets & Guards tab). Both the launcher's no-session view and the portal's New Ticket sidebar show a "Check our docs first"/"Search the docs" link when set, omitted entirely otherwise. Also fixed a bonus bug found mid-implementation: the portal's docs button had no `href`/`onClick` at all (dead markup) — now wired to the same setting. Rebuilt `stcrm-portal.js` + `stcrm-launcher.js`. Verified via Playwright: link renders with correct `href` on both surfaces when configured, disappears cleanly from both when cleared.
+
+**Resolved 2026-07-03 — Admin Assignee Controls (5.4), plugin commit `b4cf9b2`:** Thread → Manage panel gained an Assignee `<select>` (Unassigned + agents from new `STCRM_Admin::get_agents()`), wired to the existing `PATCH /admin/tickets/{id}` `assigned_to`. Inbox filter toolbar's Assignee `<select>` is now actually rendered (the JS listener for it already existed as dead code). `GET /admin/tickets?assignee=` extended to accept `me`/`unassigned` keywords alongside numeric IDs. Mid-review, a "Me" dropdown option was added then removed after the user flagged it as redundant with the current user already appearing by name in the same list — kept the harmless `me` REST keyword, dropped only the UI option. Verified via Playwright: assign/persist/unassign round-trip, all three REST filter modes return correct ticket sets.
 
 ---
 
