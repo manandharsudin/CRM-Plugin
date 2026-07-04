@@ -910,11 +910,15 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.8 Thread Header Completeness
+### 5.8 Thread Header Completeness ✅ Complete (2026-07-04)
 
-- [ ] Add category badge to the Thread header (currently only Tier/Status/Priority render)
-- [ ] Add "Assigned to you" indicator to the Thread header — depends on 5.4 landing first (assignee data needs to be in the component's ticket state)
-- Files: `src/admin/thread.jsx`
+- [x] Add category badge to the Thread header (currently only Tier/Status/Priority render)
+- [x] Add "Assigned to you" indicator to the Thread header — depends on 5.4 landing first (assignee data needs to be in the component's ticket state)
+- Files: `src/admin/thread.jsx`, `admin/css/stcrm-admin.css`
+- Plugin commit: `fbdc1b8` ✅ pushed (2026-07-04)
+- Implementation notes: `CategoryBadge` renders `ticket.category` in a grey badge (hidden entirely when null — matches how most of these QA/test tickets have no category set). "Assigned to you" is right-aligned in the header (`margin-left: auto`), shown only when `ticket.assigned_to === currentUserId`.
+- **Bug caught during Playwright verification:** the assignee indicator never rendered, even for tickets assigned to the logged-in agent. Root cause: `wp_localize_script` stringifies all scalars, so `window.stcrmThread.currentUser` is `"1"` (string) while `ticket.assigned_to` from the REST response is `1` (number) — the strict `===` comparison always failed silently. Fixed by `Number()`-casting `currentUser` once before comparing.
+- Verified via Playwright: category badge shows/hides correctly on real data (tickets #7 "Pre-sale", #9 "Technical Support" have categories; most QA test tickets don't), assignee indicator shows only when assigned to the current user and hides for other assignees/unassigned, no console errors. User cross-checked ticket #13 (no category, no coincidence — genuinely null in DB) and ticket #7 (category + assignee both rendering) to confirm the feature wasn't confusing status for category.
 
 ---
 
