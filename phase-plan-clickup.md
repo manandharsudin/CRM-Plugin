@@ -896,14 +896,17 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.7 Thread Sidebar — Customer Panel Completeness
+### 5.7 Thread Sidebar — Customer Panel Completeness ✅ Complete (2026-07-04)
 
-- [ ] Add a distinct "License active" badge (separate from the Tier badge) per README spec
-- [ ] Render `license_expires` ("Expires") — already returned by the admin ticket API, just not read by the component
-- [ ] Render `created_at` ("Customer since") — same, already available, not rendered
-- [ ] Add footer note "Synced from Freemius · read-only"
-- [ ] Masked license key (`sk_live_••••a31f`) — **not implementable as spec'd**: only `license_key_hash` (SHA-256) is stored, not a reversible/maskable raw key. Skip, or replace with a "License key on file" boolean indicator instead
-- Files: `src/admin/thread.jsx` (CustomerPanel)
+- [x] Add a distinct license-status badge (separate from the Tier badge) per README spec
+- [x] Render `license_expires` ("Expires") — already returned by the admin ticket API, just not read by the component
+- [x] Render `created_at` ("Customer since") — same, already available, not rendered
+- [x] Add footer note "Synced from Freemius · read-only"
+- [x] Masked license key (`sk_live_••••a31f`) — **not implementable as spec'd**: only `license_key_hash` (SHA-256) is stored, not a reversible/maskable raw key. Skipped, as anticipated by this checklist.
+- Files: `src/admin/thread.jsx` (CustomerPanel), `admin/css/stcrm-admin.css`
+- Plugin commit: `0aa8c06` ✅ pushed (2026-07-04)
+- Implementation notes: added `ContactTierBadge` (★ Pro / Free) and `LicenseBadge` (Active/Expired/Cancelled/No license, colored dot) — both reuse the CSS classes already shipped on the Contacts page (`stcrm-badge--pro`, `stcrm-badge--tier-free`, `stcrm-badge--license`, `stcrm-badge--lic-*`) instead of introducing new ones. Removed the old plain-text Tier/License KV rows since the badges now cover that data — avoids showing the same value twice. **Judgment call:** the README/design mock's literal badge text is "License active"; used the shorter "Active"/"Expired"/"Cancelled"/"No license" labels instead to match the wording the Contacts page already ships in production (same license_status enum, same visual system) — verbose vs. terse phrasing for the same badge across two admin screens would have been the inconsistency, not the fix.
+- Verified via Playwright across all four license states (active/expired/cancelled/none) plus null-field edge cases (no name, no plan, no expiry, no FS user ID all correctly fall back to "—"); screenshot-confirmed against the design mock layout by the user.
 
 ---
 
