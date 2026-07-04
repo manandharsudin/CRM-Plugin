@@ -944,12 +944,13 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.11 Contact Detail — "Lifetime Value" Field (low priority / spec-only)
+### 5.11 Contact Detail — "Lifetime Value" Field — ❌ Out of scope, decision made (2026-07-04)
 
-- [ ] Decide whether to build this: `wp_stcrm_contacts` has no backing column and `support-crm-spec.md` §3.1 never defines this field either — it appears to be a README-only concept with no data source anywhere in the spec
-- [ ] If proceeding: define what "lifetime value" means (sum of Freemius payments? needs a new Freemius API call or webhook-driven running total), add storage + a way to populate it, then render on Contact Detail profile card
-- [ ] If not proceeding: mark as intentionally out of scope and note it in this doc so it isn't rediscovered as a "gap" later
-- Files: TBD pending the scope decision above
+- [x] Decide whether to build this: `wp_stcrm_contacts` has no backing column and `support-crm-spec.md` §3.1 never defines this field either — it appears to be a README-only concept with no data source anywhere in the spec
+- [x] **Decision: not proceeding.** Marked intentionally out of scope — see rationale below so this isn't rediscovered as a "gap" later.
+- Files: none (no code change)
+- **Rationale:** Confirmed by re-checking the code, not just assuming: `class-stcrm-freemius-sync.php`'s `payment.created`/`license.created` handler doesn't capture any dollar amount from the Freemius webhook payload today — it only flips tier/license status. Building this properly would require capturing payment amounts + `payment.refunded`/chargeback events going forward, backfilling historical payment history via the Freemius API, a new DB column, and a migration — a real sub-feature, not a gap-fill on par with 5.1–5.10. A naive running total that ignores refunds would be actively misleading (a "Lifetime value: $249" that never shrinks after a refund is worse than showing nothing). If real revenue reporting is wanted later, scope it as its own initiative, not a Phase 5 gap.
+- **This closes Phase 5: all 11 gaps are now resolved or explicitly marked out of scope with reasoning.**
 
 ---
 
@@ -962,13 +963,13 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ### Phase 5 Acceptance
 
-- [ ] All 11 confirmed gaps above resolved or explicitly marked out-of-scope with reasoning (5.11)
+- [x] All 11 confirmed gaps above resolved or explicitly marked out-of-scope with reasoning (5.11) — **Phase 5 complete 2026-07-04**
 - [ ] Backfill progress visible and accurate during a real/sandbox run — ⚠️ pending real Freemius credentials (code complete; verified 2026-07-03 with a simulated running state via Playwright — see 5.1 implementation notes)
-- [ ] A non-Administrator role can be granted `stcrm_manage_tickets` and use the Inbox/Thread/Contacts pages
-- [ ] Agent can assign and reassign tickets from both Inbox filter and Thread Manage panel
-- [ ] Inbox search returns correct results by subject and by contact email
-- [ ] Freemius sandbox events for all newly-handled event types correctly update contact tier/plan/expiry
-- [ ] `POST /tickets` response `thread_url` resolves to a working link
+- [x] A non-Administrator role can be granted `stcrm_manage_tickets` and use the Inbox/Thread/Contacts pages — verified via Playwright + `wp eval` in 5.2
+- [x] Agent can assign and reassign tickets from both Inbox filter and Thread Manage panel — verified via Playwright in 5.4
+- [x] Inbox search returns correct results by subject and by contact email — verified via Playwright in 5.5
+- [ ] Freemius sandbox events for all newly-handled event types correctly update contact tier/plan/expiry — ⚠️ pending real Freemius credentials (5.6 was verified via 8 direct event-simulation scenarios calling `process_event()` directly, not real/sandbox webhooks — no Freemius product existed yet to test against)
+- [x] `POST /tickets` response `thread_url` resolves to a working link — verified end-to-end in 5.10 with a live ticket + session cookie
 
 ---
 
