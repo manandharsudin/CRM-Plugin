@@ -922,10 +922,13 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.9 Inbox List Pane Header Row
+### 5.9 Inbox List Pane Header Row ✅ Complete (2026-07-04)
 
-- [ ] Add the missing header row above the ticket list: "N tickets" (count) + "Sort: Smart" label
-- Files: `src/admin/inbox.jsx` (TicketList)
+- [x] Add the missing header row above the ticket list: "N tickets" (count) + "Sort: Smart" label
+- Files: `src/admin/inbox.jsx` (TicketList), `admin/css/stcrm-admin.css`
+- Plugin commit: `a714528` ✅ pushed (2026-07-04)
+- Implementation notes: new `TicketListHeader` shows a live count (singular "1 ticket" / plural "N tickets") that reflects the currently-filtered list, plus a static "Sort: Smart" label — rendered as plain text, not a functional dropdown, since no alternate sort order is defined anywhere in the spec (verified+priority "Smart" ordering is the only sort that exists). `.stcrm-list-pane` restructured from a single scrollable container into a flex column (fixed header + `.stcrm-list-pane__rows` scrolling independently below it) so the count/sort bar stays pinned while the list scrolls.
+- Verified via Playwright: count updates correctly across filters (12 → 0 on an empty filter), singular/plural label correct, header stays fixed during scroll, ticket selection + reading pane unaffected, no console errors.
 
 ---
 
