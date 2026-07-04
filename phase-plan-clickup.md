@@ -932,11 +932,15 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-### 5.10 `POST /tickets` Response — `thread_url` Field
+### 5.10 `POST /tickets` Response — `thread_url` Field ✅ Complete (2026-07-04)
 
-- [ ] Replace the hardcoded `null` (still has a `// Phase 3: populate once portal page URL is known.` placeholder comment) with a real resolved portal/thread URL
-- [ ] Reuse the existing portal-URL resolution logic already used elsewhere (`STCRM_Auth_Controller::get_portal_url()` / `STCRM_Mailer::get_portal_url()` — both query `post_content LIKE '%wp:sublime-crm/support-portal%'`)
+- [x] Replace the hardcoded `null` (still has a `// Phase 3: populate once portal page URL is known.` placeholder comment) with a real resolved portal/thread URL
+- [x] Reuse the existing portal-URL resolution logic already used elsewhere (`STCRM_Auth_Controller::get_portal_url()` / `STCRM_Mailer::get_portal_url()` — both query `post_content LIKE '%wp:sublime-crm/support-portal%'`)
 - Files: `api/class-stcrm-tickets-controller.php` (line ~281)
+- Plugin commit: `d5f3c1e` ✅ pushed (2026-07-04)
+- Implementation notes: added `get_thread_url()` + `get_portal_url()` private helpers on `STCRM_Tickets_Controller`, resolving to `{portal_url}?view=thread&ticket={id}` — same `stcrm_portal_page_id` transient-cached query used by `STCRM_Mailer`/`STCRM_Launcher` (a 3rd private copy of the same lookup, since none of the three expose a shared static entry point to call instead). Honeypot's `fake_201()` deliberately left returning `thread_url: null` — its `ticket_id` is always `0`, nothing real to link to.
+- Verified end-to-end (not just code review): created a real ticket via a live `curl POST /stcrm/v1/tickets` call, confirmed the response's `thread_url` correctly resolved to `http://sublimetheme.test/new-support/?view=thread&ticket=15`; attached a manually-issued session cookie for the ticket's contact and loaded that exact URL — it rendered the real ticket thread (subject, message, live composer). Test ticket/contact/token cleaned up afterward.
+- **Note (not a bug):** `?view=thread` only renders for an authenticated session (confirmed in the portal's own routing). Right after ticket creation there's no session yet, so the field is correct but not immediately clickable for a brand-new anonymous ticket — the real first-access path stays the magic-link confirmation email, unchanged. No frontend code currently reads `thread_url` from this response.
 
 ---
 
