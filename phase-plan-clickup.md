@@ -973,37 +973,81 @@ When/if the theme goes FSE, the block already works in the default template — 
 
 ---
 
-## PHASE 6 — Multi-Product Freemius Support (deferred until Phase 5 is finished)
+## PHASE 6 — Multi-Product Freemius Support
 
-> **Status: not started — parked 2026-07-03.** Surfaced while trying to verify 5.6 (Freemius Webhook Event Coverage): the user hadn't created the Freemius product yet and, in the process of setting it up, noticed Settings only has a single Product ID field. Investigated the actual code (not just Settings UI) to confirm the real scope of the limitation before parking it. Revisit once all 11 Phase 5 gaps are closed.
+> **Status: design complete (2026-07-05), no code written yet — brainstormed and approved by the user, awaiting explicit go-ahead to implement.** Originally surfaced 2026-07-03 while verifying 5.6 (Freemius Webhook Event Coverage): the user hadn't created the Freemius product yet and, in setting it up, noticed Settings only has a single Product ID field. Parked until Phase 5's 11 gaps closed (2026-07-04); brainstormed with the user 2026-07-05.
+> Scope target (user's call): **this site only** — a small, known set of products (currently 4 pro themes, expected to grow), not a generic multi-tenant feature for other installs.
 
-### The finding
+### The finding (confirmed via code, 2026-07-03)
 
-The DB schema was built multi-product-ready from day one — every row in `wp_stcrm_contacts` / `wp_stcrm_tickets` carries a `product_id` column, and queries are scoped by it. But the **application logic** was built for exactly one Freemius product per install, matching the original v1 spec ("built custom for SublimeTheme.com," multi-product explicitly listed as a deferred feature — see `CLAUDE.md` §21 in this repo and the plugin's own `CLAUDE.md`). That was a reasonable v1 scope call at the time, but the site currently sells 4 pro themes plus (per the user) likely more plugins in the future — so this needs to become a real feature, not a "someday."
+The DB schema was built multi-product-ready from day one — every row in `wp_stcrm_contacts` / `wp_stcrm_tickets` carries a `product_id` column, and queries are scoped by it. But the **application logic** was built for exactly one Freemius product per install. Three concrete break points:
 
-**Confirmed via code (2026-07-03), three concrete break points:**
+1. **Settings has exactly one credential set** — `freemius_product_id`, `freemius_secret_key`, `freemius_api_token` are single flat fields (`admin/class-stcrm-settings.php`). No way to register a second product's credentials.
+2. **Webhook HMAC validation is single-secret-key-only** — `api/class-stcrm-webhook.php` checks the signature against the one configured secret before even decoding the payload. A second product's webhook (signed with a different secret) fails validation and gets 401'd, even though `STCRM_Freemius_Sync::process_event()` already reads `product_id` per-payload correctly.
+3. **Every consumer-facing read hardcodes the one configured product_id**: `admin/class-stcrm-admin.php`, `api/class-stcrm-admin-controller.php`, `api/class-stcrm-auth-controller.php`, `api/class-stcrm-tickets-controller.php`, `blocks/support-portal/render.php`, `includes/Services/class-stcrm-backfill.php`.
 
-1. **Settings has exactly one credential set** — `freemius_product_id`, `freemius_secret_key`, `freemius_api_token` are single flat fields (`admin/class-stcrm-settings.php`). No way to register a second product's credentials at all today.
-2. **Webhook HMAC validation is single-secret-key-only** — `api/class-stcrm-webhook.php` decrypts and checks the signature against the *one* configured `freemius_secret_key`. A webhook from a second Freemius product (signed with its own distinct secret) fails signature validation and gets rejected with 401 — even though `STCRM_Freemius_Sync::process_event()` already reads `product_id` per-payload (`$payload['plugin_id'] ?? $payload['theme_id']`) and could route correctly across products once past that gate.
-3. **Every consumer-facing read hardcodes the one configured product_id** — confirmed via grep, every one of these reads `STCRM_Settings::get_setting('freemius_product_id')` (or the equivalent from a passed-in `$settings` array) as if there's only one product:
-   - `admin/class-stcrm-admin.php` (Inbox open-count, Thread/Contacts pages)
-   - `api/class-stcrm-admin-controller.php` (admin ticket/contact lists)
-   - `api/class-stcrm-auth-controller.php` (magic-link auth)
-   - `api/class-stcrm-tickets-controller.php` (ticket creation — tier resolution)
-   - `blocks/support-portal/render.php` (portal block)
-   - `includes/Services/class-stcrm-backfill.php` (contact backfill)
+### Design decisions (brainstormed 2026-07-05)
 
-   A ticket submitted about a *different* theme than whichever one is configured in Settings would get tagged with the wrong `product_id` and fail tier verification, since it'd only ever check contacts scoped to the configured product.
+- **Ticket product identification: explicit dropdown**, not auto-detection by email/license. A customer picks their product from a `<select>` when opening a ticket — always correct, no ambiguity, no failure mode for customers who own 2+ products. Both ticket-creation entry points (Portal `NewTicketView` and Launcher `NoSessionView`) get this field, since both `POST /tickets`.
+- **No "General/pre-sale" pseudo-product.** Considered a `product_id = 0` sentinel for customers without a purchase yet, but rejected — the dropdown is product-only, and pre-sale intent is already expressible via the existing `category` field (a "Pre-sale" category value is already in use). This means `STCRM_Tier_Resolver` / `STCRM_Guard_Matrix` need **no special-case branch** — every ticket always carries a real, configured `product_id`.
+- **Settings UI: dynamic add/remove product rows** (not a fixed set of slots) — scales cleanly as products are added, no arbitrary cap.
+- **Webhook secret resolution: hybrid brute-force + diagnostic parse ("Approach B+").** Rejected reading the product ID out of the payload *before* verification as the primary mechanism (fragile if Freemius's field name/path differs by event type) and rejected per-product webhook URLs (requires reconfiguring each product's URL in the Freemius dashboard, easy to forget when adding a product). Instead: loop over all configured products' secrets, `hash_equals()` each against the signature, first match wins — the signature match *is* the identification, nothing is trusted from the payload for this decision. On the rare case where the product count grows large enough that failed-webhook debugging becomes painful, the payload is *also* best-effort parsed for a product identifier purely for the error log line (never for the accept/reject decision) — chosen because performance is a non-issue at any realistic product count for this site (HMAC-SHA256 is microseconds), but clear failure attribution matters as the list grows past a handful of entries.
+- **Admin visibility: badge + filter.** Now that tickets/contacts span multiple products, Inbox and Contacts need to show which product each row belongs to, and Inbox needs a Product filter — otherwise the support team has no way to triage by product.
+- **Spec location:** this section of `phase-plan-clickup.md`, matching the established Phase 5 pattern, rather than a separate spec file.
 
-### Recommended direction (not yet agreed / not started)
+### 6.1 Settings: Multi-Product Data Model
 
-- Turn the three flat Freemius credential fields into a repeatable list: `[{product_id, secret_key, api_token, label}, ...]`.
-- Fix the webhook: read `plugin_id`/`theme_id` from the payload body **before** checking the signature, look up that specific product's secret key from the list, then validate HMAC against it. This alone fixes multi-product webhook ingestion cleanly — `process_event()` already handles per-payload product_id correctly.
-- **Open design question, needs the user's call before any code:** with 4–5 products funneling into one shared support portal/launcher, does the new-ticket form need an explicit "which product is this about?" selector, or should the system infer it (match the submitted email/license key against *all* configured products)? This decides the ticket-form UX and changes `src/portal/NewTicketView.jsx` + the tier-resolution flow either way.
+- [ ] Replace flat `freemius_product_id` / `freemius_secret_key` / `freemius_api_token` fields with `$settings['products'] = [{product_id, label, secret_key, api_token}, ...]`
+- [ ] Settings → Freemius tab: dynamic add/remove rows (JS-driven, no arbitrary slot cap), one "Backfill" button per row (see 6.5)
+- [ ] Save-time guard: reject the save with a clear error if two product rows have an identical `secret_key` (prevents ambiguous matches in 6.2's brute-force loop)
+- [ ] **Migration:** on first load after upgrade, if `products` is empty but the old flat fields are set, auto-convert into a single-entry list. Idempotent — skip entirely if `products` is already non-empty (already migrated, or admin populated it manually). No DB data migration needed — `product_id` is already correct on every existing ticket/contact row.
+- Files: `admin/class-stcrm-settings.php`, `admin/js/stcrm-settings.js`, `admin/css/stcrm-admin.css`
+
+### 6.2 Webhook: Hybrid Secret Resolution
+
+- [ ] `STCRM_Webhook::handle_webhook()`: loop over all configured products' secrets, `hash_equals()` each against the `x-signature` header; first match identifies the product for this request
+- [ ] On no match: best-effort, non-authoritative parse of the JSON body for a product/plugin identifier field (wrapped defensively — purely diagnostic), include it (or "unrecognized") in the 401 log line. Never affects the accept/reject decision.
+- [ ] `process_event()`'s existing per-payload `product_id` read stays the source of truth for event *processing* — the loop above only resolves which secret to use for *signature verification*
+- Files: `api/class-stcrm-webhook.php`
+
+### 6.3 `GET /products` Endpoint + Ticket-Form Product Selector
+
+- [ ] New public REST route `GET /stcrm/v1/products` → `[{product_id, label}, ...]` from the configured list. No secrets/tokens exposed — labels only.
+- [ ] `src/portal/NewTicketView.jsx`: add a required "Which product is this about?" `<select>` before Subject, populated from this endpoint
+- [ ] `src/launcher/Launcher.jsx` (`NoSessionView`): same product `<select>` added to its Email/Subject/Message form
+- [ ] `POST /tickets`: validate the submitted `product_id` server-side against the configured list — reject with 400 if it doesn't match a real product (never trust the client-submitted ID as-is)
+- [ ] Empty-list edge case: if no products are configured, the ticket form shows a clear "no products configured, contact admin" state instead of a broken empty dropdown
+- [ ] Portal block becomes product-agnostic as a side effect — one page/embed now serves all products, replacing the previous implicit one-portal-per-product assumption via the single global `productId`
+- Files: `api/class-stcrm-tickets-controller.php` (or new controller for the products route), `src/portal/NewTicketView.jsx`, `src/launcher/Launcher.jsx`, `blocks/support-portal/render.php`
+
+### 6.4 Admin UI: Product Visibility
+
+- [ ] Inbox: Product badge on each list row (label looked up by `ticket.product_id`); Product filter `<select>` in the toolbar alongside Status/Priority/Tier/Assignee; `GET /admin/tickets?product_id=` filter param
+- [ ] Contacts: Product column in the table (same label lookup by `contact.product_id`)
+- [ ] Thread header / Contact detail: product label shown alongside existing badges
+- [ ] Stale product handling: a ticket/contact referencing a `product_id` no longer in Settings shows `"Product #12345 (removed)"` — labels are looked up live server-side, never denormalized onto the ticket/contact row
+- Files: `src/admin/inbox.jsx`, `admin/class-stcrm-admin.php`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/thread.jsx`, admin Contacts templates, `admin/css/stcrm-admin.css`
+
+### 6.5 Backfill: Per-Product
+
+- [ ] Replace global `stcrm_backfill_last_page` / `stcrm_backfill_total` options with per-product keys (`..._{product_id}`)
+- [ ] `stcrm_run_backfill_page` AS job gains a `product_id` argument; reads that product's `api_token` from the settings list instead of one global token
+- [ ] Settings "Backfill" button (6.1) becomes one button + one progress meter per product row (reuses the existing Phase 5.1 progress-meter UI pattern, just parameterized)
+- [ ] Two products' backfills can run concurrently without interfering (disjoint option keys, disjoint AS job args)
+- Files: `includes/Services/class-stcrm-backfill.php`, `admin/class-stcrm-settings.php`
+
+### Phase 6 Acceptance
+
+- [ ] Settings: add/remove product rows, save, reload → persisted correctly; duplicate-secret save is rejected with a clear error
+- [ ] Webhook: signed payloads for 2+ distinct configured secrets each resolve to the correct product; unmatched signature → 401 with a diagnostic log line — ⚠️ likely blocked on real/sandbox verification until a second Freemius product actually exists (same constraint as Phase 5.6)
+- [ ] Ticket creation (Portal + Launcher): dropdown lists correct products, submitted ticket carries correct `product_id`, tier resolution/guard matrix behave correctly per product
+- [ ] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified
+- [ ] Backfill: two products' backfills run independently without cross-contaminating progress
+- [ ] Regression: a simulated old single-product install's settings migrate to a working one-entry `products` list with no behavior change
 
 ### Next step
 
-Do not start this until Phase 5's 11 gaps are fully closed (per user instruction, 2026-07-03). When resumed, treat this as its own initiative — brainstorm/design the portal-side product-selection UX with the user before writing any code, not just the settings-array + webhook plumbing above.
+**Do not write any code until the user explicitly says so** (per instruction, 2026-07-05) — this section is the approved design; implementation planning (task breakdown via the writing-plans skill) is the next step once the user reviews this written spec.
 
 ---
 
@@ -1016,5 +1060,5 @@ Do not start this until Phase 5's 11 gaps are fully closed (per user instruction
 | 3 — Touchpoints | 6–8 | 11 groups | ~40 tasks |
 | 4 — Notifications & Hardening | 9–10 | 10 groups | ~35 tasks |
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
-| 6 — Multi-Product Freemius Support | — | deferred, not scoped yet | TBD |
-| **Total** | **10 weeks + gap closure** | **50 groups** | **~190 tasks** |
+| 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
+| **Total** | **10 weeks + gap closure** | **55 groups** | **~215 tasks** |
