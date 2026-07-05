@@ -1015,12 +1015,20 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
   - PHP CLI (reflection): `build_products_from_post()` — existing row with blank password fields keeps its old encrypted secret/token, brand-new row's own values are freshly encrypted, blank-`product_id` rows are dropped. `has_duplicate_secret()` — correctly flags two rows sharing one secret (even with different ciphertext/IV), correctly allows distinct secrets, correctly ignores rows with no secret configured yet.
   - HTTP end-to-end (authenticated admin cookies + a correctly-derived nonce, generated via `wp_generate_auth_cookie()`/`WP_Session_Tokens`, no Playwright available this session): GET the Freemius tab → renders the migrated product row + Add-Product button + hidden template. POST a save with an existing row (blank password fields) + a new row (own secret/token) → 302 to `?saved=1`; confirmed via `get_settings()` that the existing secret was preserved and the new row's values were correctly encrypted. POST a save where the new row's secret duplicates the existing row's secret → 302 to `?error=duplicate_secret`, option left completely unchanged, error notice confirmed present in the re-rendered page HTML.
 
-### 6.2 Webhook: Hybrid Secret Resolution
+### 6.2 Webhook: Hybrid Secret Resolution ✅ Complete (2026-07-05)
 
-- [ ] `STCRM_Webhook::handle_webhook()`: loop over all configured products' secrets, `hash_equals()` each against the `x-signature` header; first match identifies the product for this request
-- [ ] On no match: best-effort, non-authoritative parse of the JSON body for a product/plugin identifier field (wrapped defensively — purely diagnostic), include it (or "unrecognized") in the 401 log line. Never affects the accept/reject decision.
-- [ ] `process_event()`'s existing per-payload `product_id` read stays the source of truth for event *processing* — the loop above only resolves which secret to use for *signature verification*
+- [x] `STCRM_Webhook::validate_signature()`: loop over all configured products' secrets, `hash_equals()` each against the `x-signature` header; first match identifies the product for this request
+- [x] On no match: best-effort, non-authoritative parse of the JSON body for a product/plugin identifier field (wrapped defensively — purely diagnostic), include it (or "unrecognized") in the 401 log line. Never affects the accept/reject decision.
+- [x] `process_event()`'s existing per-payload `product_id` read stays the source of truth for event *processing* — the loop above only resolves which secret to use for *signature verification* (unchanged, no code touched there)
 - Files: `api/class-stcrm-webhook.php`
+
+**Implementation notes (2026-07-05):**
+- `validate_signature()` rewritten: reads `STCRM_Settings::get_settings()['products']` (6.1's new list), rejects with `stcrm_no_products_configured` if empty, then loops decrypting each product's `secret_key` and computing `hash_equals()` against the request's `x-signature` header — first match returns `true` immediately. No product identity is threaded through the return value; `STCRM_Freemius_Sync::process_event()` (untouched) independently re-derives `product_id` from the payload body (`plugin_id ?? theme_id`) once processing starts, exactly as the design called for.
+- New `log_unmatched_signature()`: on a full loop with no match, best-effort `json_decode`s the raw body and reads the same `plugin_id ?? theme_id` fields `process_event()` uses, purely to make the `WP_DEBUG` log line more informative ("claimed product_id=X" or "no recognizable product_id in payload"). This parse never influences the accept/reject outcome — it only runs *after* the loop has already decided to reject.
+- **Verified (2026-07-05)** against the real dev Settings (3 products now configured: Theme A/B/C, added by the user during their own 6.1 manual check):
+  - PHP CLI (reflection on the private `validate_signature()`): a signature computed with Theme A's secret validates `true`; same for Theme B's secret; a signature computed with a secret matching *no* configured product correctly returns `stcrm_invalid_signature`; a request with no `x-signature` header correctly returns `stcrm_missing_signature`.
+  - Confirmed the diagnostic log fires and is accurate but non-authoritative: a wrong-secret request for a payload claiming `plugin_id=123456` logged `claimed product_id=123456` even though the actual failure reason was an unmatched secret, not an unrecognized product — exactly the "log-only, never decides" behavior intended.
+  - **Live HTTP round-trip** against the real REST route (`POST /wp-json/stcrm/v1/fs-webhook`, no auth cookie needed — public HMAC-only endpoint): a payload signed with Theme A's real secret → `200 {"received":true}`; the same payload with a bogus signature → `401 {"error":"Webhook signature mismatch."}`.
 
 ### 6.3 `GET /products` Endpoint + Ticket-Form Product Selector
 
