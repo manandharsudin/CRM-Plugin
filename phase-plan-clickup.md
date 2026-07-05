@@ -1236,11 +1236,18 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Resolution:** no code change to the transmission method — accepted as an unavoidable constraint of the third-party API, matching the finding's own fix direction ("confirm with Freemius docs whether an alternative exists; otherwise, document as an accepted risk"). Added a code comment at the `verify_key_via_api()` call site explaining this research conclusion, so a future maintainer doesn't mistake it for an unaddressed oversight and doesn't waste time re-investigating the same question.
 - Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
 
-### 7.8 Admin ticket-list sort has no supporting index — LOW (Performance)
+### 7.8 Admin ticket-list sort has no supporting index — LOW (Performance) ✅ Complete (2026-07-05)
 
-- [ ] `get_admin_tickets()`'s `ORDER BY t.verified DESC, priority_order DESC, ...` can't use an index (`verified` isn't indexed; `priority_order` is a computed `CASE`), forcing a filesort every Inbox load. Fine at expected scale (hundreds–low thousands of tickets); worth a composite index if a single install's ticket volume grows large.
-- Files: `includes/Database/class-stcrm-database.php` (`get_admin_tickets()`)
-- Fix direction: add a composite index on `(verified, priority)`, or precompute priority ordering as a stored/generated column, if volume ever warrants it.
+- [x] `get_admin_tickets()`'s `ORDER BY t.verified DESC, priority_order DESC, ...` can't use an index (`verified` isn't indexed; `priority_order` is a computed `CASE`), forcing a filesort every Inbox load. Fine at expected scale (hundreds–low thousands of tickets); worth a composite index if a single install's ticket volume grows large.
+- Files: `includes/Database/class-stcrm-database.php` (`create_tickets_table()`, `get_admin_tickets()`), `sublime-crm.php` (`STCRM_DB_VERSION`)
+
+**Implementation notes (2026-07-05):** Two changes, not just an index — a computed `CASE` expression can never be satisfied by *any* index, so adding one alone wouldn't have helped.
+1. Discovered `wp_stcrm_tickets.priority` is declared `enum('low','normal','high','critical')` — MySQL sorts ENUM columns by their *declared index position*, not alphabetically, and that declaration order already matches ascending severity. So `ORDER BY t.priority DESC` alone (critical→high→normal→low) produces the identical result to the old `CASE t.priority WHEN 'critical' THEN 4 ...` expression, with no computed column needed. Replaced the CASE + `priority_order` alias with a direct sort on `t.priority DESC`.
+2. Added `KEY verified_priority_activity (verified, priority, last_activity_at)` to the tickets table (`STCRM_DB_VERSION` 1.0.2 → 1.0.3, self-applies via `dbDelta` on next load, same pattern as 7.2's index).
+- `priority_order` was confirmed (via grep) to be consumed nowhere outside the query that defined it — safe to remove entirely, not just rename.
+
+**Verified (2026-07-05):** confirmed the migration self-applied (`stcrm_db_version` → `1.0.3`, `SHOW INDEX` shows the new 3-column key). Regression check: ran the old CASE-based query and the new fixed method side-by-side against the real 12-ticket dataset (mixed priorities) — **identical row ordering** confirms the ENUM-sort simplification changes nothing customer/admin-visible. Query-plan check: `EXPLAIN` on the real table (12 rows) shows MySQL choosing a full scan + filesort — correct optimizer behavior at this tiny scale, not a sign the fix failed. Forced the new index via `FORCE INDEX` and re-ran `EXPLAIN`: `Extra` became `"Backward index scan; Using index"` with **no filesort at all**, proving the index structurally and fully satisfies the sort — MySQL will pick it up automatically once ticket volume grows enough for the optimizer's cost model to prefer it, with no further code change needed.
+- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
 
 ### 7.9 `resolved_at` left stale after an agent replies to a resolved ticket — LOW (Error Handling / data hygiene)
 
