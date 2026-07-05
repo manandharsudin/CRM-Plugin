@@ -1132,6 +1132,75 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 
 ---
 
+## PHASE 7 — Deep QA Findings (Performance, Security, Optimization, Error Handling)
+
+> Found via a full manual code review of the entire plugin (all 26 PHP files, ~8,500 lines — no PHPCS/PHPStan available in the review environment, so this was direct code-reading of actual request/data flows, not static-analysis output), requested 2026-07-05 after Phase 6 completed. Not a design-handoff gap audit like Phase 5 — this is a QA pass across four lenses: performance, security, optimization/duplication, and error handling.
+> 10 findings total, ranked by severity. **Handle one at a time, per user's explicit instruction — do not batch-fix.** None are showstoppers for current usage; #7.1, #7.2, and #7.3 are the priority order recommended.
+
+---
+
+### 7.1 Stored XSS via WordPress `display_name` in ticket system messages — HIGH (Security)
+
+- [ ] `STCRM_Admin_Controller::update_ticket()` builds a status-change system message with `sprintf(..., $actor->display_name, ...)` and inserts it via `STCRM_Database::insert_message()` **without** passing through `sanitize_body()`/`wp_kses()` — every other message-insert path in the codebase does. WordPress core does not strip HTML from `display_name` at save time (relies on `esc_html()` at output, not input sanitization). That `body` is later rendered raw via `dangerouslySetInnerHTML` in `src/admin/thread.jsx`, `src/portal/ThreadView.jsx`, and `src/launcher/Launcher.jsx`. Any WP account — including a lower-privileged "support role" this plugin lets admins delegate — with a crafted display name, that then changes any ticket's status, gets stored script execution in an Administrator's wp-admin session or a customer's portal session.
+- Files: `api/class-stcrm-admin-controller.php` (`update_ticket()`, system-message insert)
+- Fix direction: run the system-message body through the same sanitizer as customer/agent messages, or at minimum `esc_html()` the display name at construction time.
+
+### 7.2 Missing index on `wp_stcrm_contacts.email`, hit on every authenticated request — HIGH (Performance)
+
+- [ ] The table only has `UNIQUE KEY product_email (product_id, email)` — no standalone key on `email`. `STCRM_Database::get_contacts_by_email()` queries `WHERE email = %s` with no `product_id`, which on MySQL 5.7 (the plugin's stated minimum) can't use that composite index → full table scan. This runs inside `STCRM_Session_Auth::authenticate()`, the `permission_callback` for every portal REST call (list tickets, view ticket, post message, `/me`) — so every authenticated customer request does a full scan, unconditionally, even on single-product installs where no sibling contact could ever exist.
+- Files: `includes/Database/class-stcrm-database.php` (`create_contacts_table()`, `get_contacts_by_email()`), `api/class-stcrm-session-auth.php` (`authenticate()`)
+- Fix direction: add `KEY email (email)` (DB version bump + dbDelta migration); short-circuit the sibling lookup to `[$contact->id]` when only one product is configured.
+
+### 7.3 Synchronous Freemius API call blocks public ticket creation — HIGH (Performance)
+
+- [ ] `POST /tickets` → `STCRM_Tier_Resolver::resolve()` → `verify_key_via_api()` does a `wp_remote_get()` with a 15s timeout directly in the request path when a license key is submitted and isn't cached. This contradicts the plugin's own documented rule ("Do not call Freemius API synchronously on the request path — queue via Action Scheduler"). A slow/down Freemius endpoint stalls ticket creation for up to 15s per request and ties up a PHP-FPM worker; the only throttle on this path is a 5/hour **per-IP** limit (no per-license-key limiter).
+- Files: `includes/Services/class-stcrm-tier-resolver.php` (`verify_key_via_api()`), `api/class-stcrm-tickets-controller.php` (`create_ticket()`)
+- Fix direction: apply the same async-first pattern already used for the "API unreachable" case (`verification_pending` + queued `stcrm_reverify_contact`) to first-time key verification too, instead of blocking the request.
+
+### 7.4 Uncached 4th duplicate of the portal-URL lookup, on an unrate-limited path — MEDIUM (Performance / Duplication)
+
+- [ ] Three classes (`STCRM_Mailer`, `STCRM_Launcher`, `STCRM_Tickets_Controller`) share the same `post_content LIKE '%...%'` portal-page lookup and all cache it behind the `stcrm_portal_page_id` transient. `STCRM_Auth_Controller::get_portal_url()` is a 4th copy of the same query but is missing the transient cache. It's called from `handle_redemption()` on `template_redirect`, which runs on every front-end hit whose `?t=` parameter merely shape-matches the token regex — no auth, no rate limit on that endpoint. A leading-wildcard `LIKE` can't use an index, so this is a full `wp_posts` scan triggerable by any bot/scanner probing random `?t=` values.
+- Files: `api/class-stcrm-auth-controller.php` (`get_portal_url()`) — compare with `includes/Services/class-stcrm-mailer.php`, `includes/class-stcrm-launcher.php`, `api/class-stcrm-tickets-controller.php`
+- Fix direction: reuse the same transient-cache pattern the other three copies already have.
+
+### 7.5 Agent-alert emails have no debounce, unlike customer notifications — MEDIUM (Error Handling / Optimization)
+
+- [ ] `STCRM_Mailer::queue_agent_alert()` unconditionally enqueues an AS job, with none of the pending-lock/debounce logic `queue_reply_notification()` got specifically to fix "3 rapid messages → 3 emails" (the documented "Phase 4 Debounce Fix"). `STCRM_Tickets_Controller::create_message()` (customer reply) calls `queue_agent_alert()` on every single customer message — so a customer sending rapid follow-ups generates one full email to the agent per message, the same bug class the debounce fix addressed, just on the other side of the conversation.
+- Files: `includes/Services/class-stcrm-mailer.php` (`queue_agent_alert()`), `api/class-stcrm-tickets-controller.php` (`create_message()`)
+- Fix direction: apply the same two-stage debounce pattern used for `queue_reply_notification()`.
+
+### 7.6 `STCRM_Freemius_Sync`'s `$wpdb->update()` calls don't check return values — MEDIUM (Error Handling)
+
+- [ ] Unlike `handle_install_event()` in the same file (which checks `upsert_contact()`'s return and logs failures) and unlike essentially every write path in the REST controllers, `handle_user_updated()`, the existing-contact branch of `handle_license_status_change()`, `handle_plan_changed()`, and `handle_license_expiry_changed()` all discard `$wpdb->update()`'s result. Runs unattended via Action Scheduler with zero user-facing feedback — a failure (e.g. `handle_user_updated()`'s email change colliding with another contact's `(product_id, email)` unique key) silently leaves Freemius data stale forever with no log line to find it by.
+- Files: `includes/Services/class-stcrm-freemius-sync.php` (`handle_user_updated()`, `handle_license_status_change()`, `handle_plan_changed()`, `handle_license_expiry_changed()`)
+- Fix direction: check the return of each `$wpdb->update()` and log via the existing `log()` helper on failure, consistent with `handle_install_event()`.
+
+### 7.7 Freemius license secret sent as a GET query param — MEDIUM (Security, informational)
+
+- [ ] `STCRM_Tier_Resolver::verify_key_via_api()` puts the customer's raw license `secret_key` in the URL query string to Freemius's API. Full URLs (including query params) are commonly captured in proxy/APM/access logs on both ends. May simply be how Freemius's documented API works (not necessarily fixable plugin-side) — flagged so nobody enables verbose HTTP request logging on this box, and to confirm Freemius doesn't offer a header/body alternative.
+- Files: `includes/Services/class-stcrm-tier-resolver.php` (`verify_key_via_api()`)
+- Fix direction: confirm with Freemius docs whether an alternative to query-string transmission exists; otherwise, document as an accepted risk.
+
+### 7.8 Admin ticket-list sort has no supporting index — LOW (Performance)
+
+- [ ] `get_admin_tickets()`'s `ORDER BY t.verified DESC, priority_order DESC, ...` can't use an index (`verified` isn't indexed; `priority_order` is a computed `CASE`), forcing a filesort every Inbox load. Fine at expected scale (hundreds–low thousands of tickets); worth a composite index if a single install's ticket volume grows large.
+- Files: `includes/Database/class-stcrm-database.php` (`get_admin_tickets()`)
+- Fix direction: add a composite index on `(verified, priority)`, or precompute priority ordering as a stored/generated column, if volume ever warrants it.
+
+### 7.9 `resolved_at` left stale after an agent replies to a resolved ticket — LOW (Error Handling / data hygiene)
+
+- [ ] `STCRM_Admin_Controller::create_message()`'s reply branch sets `status → awaiting_customer` but never clears `resolved_at` — contrast with the customer-side reopen in `STCRM_Tickets_Controller::create_message()`, which explicitly nulls it. Harmless for the auto-close cron (which separately filters `status = 'resolved'`), but `format_ticket()` exposes `resolved_at` unconditionally, so the admin Thread UI can show a stale "resolved" timestamp on a ticket that's actually back in `awaiting_customer`.
+- Files: `api/class-stcrm-admin-controller.php` (`create_message()`)
+- Fix direction: clear `resolved_at` in the same update call whenever a reply moves a ticket out of `resolved`, mirroring the customer-side reopen logic.
+
+### 7.10 No server-side numeric validation on Settings "Product ID" field — LOW (Security, defense-in-depth)
+
+- [ ] `STCRM_Settings::build_products_from_post()` only runs `sanitize_text_field()` on `product_id`, despite the client-side `pattern="[0-9]+"` hint and every downstream consumer treating it as numeric. Admin-only, capability-gated, so not exploitable — just a silent-failure trap (a typo'd non-numeric ID quietly breaks that product's webhook/ticket flows with no validation error at save time).
+- Files: `admin/class-stcrm-settings.php` (`build_products_from_post()`)
+- Fix direction: validate `product_id` is numeric server-side at save time and reject/flag the row if not, matching the duplicate-secret guard's "reject with a clear error" pattern.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -1142,4 +1211,5 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 | 4 — Notifications & Hardening | 9–10 | 10 groups | ~35 tasks |
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
+| 7 — Deep QA Findings | — | 10 findings (none started) | 10 tasks |
 | **Total** | **10 weeks + gap closure** | **55 groups** | **~215 tasks** |
