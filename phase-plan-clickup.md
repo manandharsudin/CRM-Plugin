@@ -1030,15 +1030,25 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
   - Confirmed the diagnostic log fires and is accurate but non-authoritative: a wrong-secret request for a payload claiming `plugin_id=123456` logged `claimed product_id=123456` even though the actual failure reason was an unmatched secret, not an unrecognized product — exactly the "log-only, never decides" behavior intended.
   - **Live HTTP round-trip** against the real REST route (`POST /wp-json/stcrm/v1/fs-webhook`, no auth cookie needed — public HMAC-only endpoint): a payload signed with Theme A's real secret → `200 {"received":true}`; the same payload with a bogus signature → `401 {"error":"Webhook signature mismatch."}`.
 
-### 6.3 `GET /products` Endpoint + Ticket-Form Product Selector
+### 6.3 `GET /products` Endpoint + Ticket-Form Product Selector ✅ Complete (2026-07-05)
 
-- [ ] New public REST route `GET /stcrm/v1/products` → `[{product_id, label}, ...]` from the configured list. No secrets/tokens exposed — labels only.
-- [ ] `src/portal/NewTicketView.jsx`: add a required "Which product is this about?" `<select>` before Subject, populated from this endpoint
-- [ ] `src/launcher/Launcher.jsx` (`NoSessionView`): same product `<select>` added to its Email/Subject/Message form
-- [ ] `POST /tickets`: validate the submitted `product_id` server-side against the configured list — reject with 400 if it doesn't match a real product (never trust the client-submitted ID as-is)
-- [ ] Empty-list edge case: if no products are configured, the ticket form shows a clear "no products configured, contact admin" state instead of a broken empty dropdown
-- [ ] Portal block becomes product-agnostic as a side effect — one page/embed now serves all products, replacing the previous implicit one-portal-per-product assumption via the single global `productId`
-- Files: `api/class-stcrm-tickets-controller.php` (or new controller for the products route), `src/portal/NewTicketView.jsx`, `src/launcher/Launcher.jsx`, `blocks/support-portal/render.php`
+- [x] New public REST route `GET /stcrm/v1/products` → `[{product_id, label}, ...]` from the configured list. No secrets/tokens exposed — labels only.
+- [x] `src/portal/NewTicketView.jsx`: add a required "Which product is this about?" `<select>` before Subject, populated from this endpoint
+- [x] `src/launcher/Launcher.jsx` (`NoSessionView`): same product `<select>` added to its Email/Subject/Message form
+- [x] `POST /tickets`: validate the submitted `product_id` server-side against the configured list — reject with 400 if it doesn't match a real product (never trust the client-submitted ID as-is)
+- [x] Empty-list edge case: if no products are configured, the ticket form shows a clear "no products configured, contact admin" state instead of a broken empty dropdown
+- [x] Portal block becomes product-agnostic as a side effect — one page/embed now serves all products, replacing the previous implicit one-portal-per-product assumption via the single global `productId`
+- Files: `api/class-stcrm-tickets-controller.php`, `src/portal/NewTicketView.jsx`, `src/launcher/Launcher.jsx`, `blocks/support-portal/render.php`
+
+**Implementation notes (2026-07-05):**
+- `STCRM_Tickets_Controller::get_products()` (new, public route) returns the configured `products` list shaped to `{product_id, label}` only — `secret_key`/`api_token` never leave the server.
+- `create_ticket()`: the old `$product_id = absint( STCRM_Settings::get_setting( 'freemius_product_id' ) )` is replaced by a new `resolve_product_id( string $submitted )` private helper — empty submission → 422 `stcrm_validation_error` ("Please choose which product this is about."), a value not matching any configured product's `product_id` → 400 `stcrm_invalid_product`. Everything downstream (tier resolution, contact upsert, guard matrix, ticket insert) is unchanged — it already took `$product_id` as a parameter, so only the *source* of that value changed.
+- `src/portal/NewTicketView.jsx` and `src/launcher/Launcher.jsx` (`NoSessionView`) both independently fetch `GET /products` on mount and render a required product `<select>` (Portal: new row before Subject; Launcher: between Email and Subject in the compact form). Both show a "Support form unavailable" message in place of the form if the list loads empty (or the fetch fails — treated the same, since either means a ticket can't be created right now).
+- `blocks/support-portal/render.php`: removed the `productId` key from `wp_localize_script( 'stcrm-portal', 'stcrmPortal', ... )` — confirmed via grep that nothing in `src/portal/` read `window.stcrmPortal.productId` before removing it.
+- Rebuilt via `npm run build` (`stcrm-portal.js` 32.2 KiB, `stcrm-launcher.js` 15.7 KiB).
+- **Verified (2026-07-05):** `GET /products` returns all 3 configured products (Theme A/B/C) with labels only. `POST /tickets` with no `product_id` → 422; with a made-up `product_id` → 400; with a real `product_id` (Theme B) → 201, and confirmed directly in the DB that both the new ticket row and its newly-created contact row carry `product_id = 789012` (Theme B), not the old hardcoded value — the full chain (dropdown selection → validation → tier resolution → contact upsert → ticket insert) is correctly product-scoped end to end. Test ticket/contact/message cleaned up after verification. **No Playwright this session** — the dropdown's on-screen rendering in the Portal/Launcher UI itself hasn't been visually confirmed in a browser; REST-contract behavior is fully verified.
+
+**⚠️ Finding surfaced during 6.3:** `STCRM_Auth_Controller::request_magic_link()` still read the deleted flat `freemius_product_id` setting, so magic-link sign-in was broken for everyone (not just multi-product). This wasn't in the original 6.1–6.5 scope — **resolved as its own brainstormed sub-task, see 6.6 below.**
 
 ### 6.4 Admin UI: Product Visibility
 
@@ -1056,18 +1066,36 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - [ ] Two products' backfills can run concurrently without interfering (disjoint option keys, disjoint AS job args)
 - Files: `includes/Services/class-stcrm-backfill.php`, `admin/class-stcrm-settings.php`
 
+### 6.6 Email-Scoped Sessions (Magic-Link Sign-In Fix) ✅ Complete (2026-07-05)
+
+> Not in the original 6.1–6.5 scope — surfaced while implementing 6.3: `STCRM_Auth_Controller::request_magic_link()` still read the deleted flat `freemius_product_id` setting, so magic-link sign-in was broken for everyone (not just a multi-product edge case). Brainstormed with the user as its own design (the deep-link `ticket_id` case is deterministic; the generic "sign in, no ticket context" case needed a real decision since contacts are now scoped per (product_id, email) and one email can have several contact rows). User chose: **one session shows tickets across every product the customer has bought under that email**, not just the one anchor contact used to issue the token.
+
+- [x] `STCRM_Database::get_contacts_by_email( string $email ): array` — every contact row matching an email across all products, most-recently-updated first
+- [x] `STCRM_Database::get_tickets_by_contact_ids( array $contact_ids, ... ): array` — same shape as `get_tickets_by_contact()` but `WHERE contact_id IN (...)`
+- [x] `STCRM_Session_Auth::authenticate()` — after resolving the token's anchor contact (unchanged), also resolves every sibling contact ID sharing that email and attaches it as `_stcrm_contact_ids`; new `STCRM_Session_Auth::get_contact_ids()` accessor
+- [x] `STCRM_Tickets_Controller::get_tickets()` — now calls `get_tickets_by_contact_ids()` with the full session contact-ID set, not just the anchor
+- [x] `STCRM_Tickets_Controller::get_ticket()` / `create_message()` — ownership check changed from `ticket->contact_id === contact->id` to `in_array( ticket->contact_id, session_contact_ids )`; both also now look up the **ticket's own owning contact** for tier-dependent decisions (`compute_composer()`, rate limit, turn limit) instead of assuming the session anchor's tier — a ticket under a sibling contact can have a different tier than the anchor
+- [x] `STCRM_Auth_Controller::request_magic_link()` — two paths: `ticket_id` present resolves deterministically via the ticket's own contact (verifying the submitted email matches); `ticket_id` absent resolves via `get_contacts_by_email()`, using the most-recently-updated match purely as the token's anchor (session expansion at validation time makes the anchor choice non-limiting)
+- Files: `includes/Database/class-stcrm-database.php`, `api/class-stcrm-session-auth.php`, `api/class-stcrm-tickets-controller.php`, `api/class-stcrm-auth-controller.php`
+
+**Implementation notes (2026-07-05):**
+- Deliberately did **not** merge/denormalize contact rows across products — `wp_stcrm_contacts` stays exactly as scoped today `(product_id, email)` unique, since per-product tier/license tracking from Freemius webhooks depends on that. The fix is purely at the authorization layer (session → contact IDs), not the data model.
+- `get_contacts_by_email()` and the anchor-contact logic are also correctly independent from the `ticket_id`-present path — a magic link requested *with* a ticket_id always resolves via that exact ticket's contact, never via the "most recently updated" heuristic, so a customer with 2+ products always lands on the right one when the request is ticket-scoped.
+- **Verified (2026-07-05):** created two real tickets for the same email under two different products (Theme A `product_id=123456`, Theme B `product_id=789012`). Confirmed `get_contacts_by_email()` returns both contact rows. Manually issued a session token anchored to the Theme B contact (same pattern used for Bruno/CLI test sessions in earlier phases — no email delivery needed) and confirmed: `GET /tickets` returned **both** tickets (Theme A + Theme B) in one session; `GET /tickets/{id}` succeeded (200) for both the anchor's own ticket and the sibling ticket, and correctly returned 403 for an unrelated ticket belonging to a different email entirely. Separately verified the `ticket_id`-present magic-link path via direct `request_magic_link()` calls: a wrong email + a real `ticket_id` was silently ignored (anti-enumeration, 200 generic response, no job queued); the correct email + that `ticket_id` correctly queued the AS `stcrm_send_magic_link` job with the **ticket's own contact** (Theme A's contact, id 15) — not the Theme B anchor used in the generic-path test — confirming the two resolution paths are independent and each correct in isolation. All test tickets/contacts/tokens/AS jobs cleaned up afterward.
+
 ### Phase 6 Acceptance
 
-- [ ] Settings: add/remove product rows, save, reload → persisted correctly; duplicate-secret save is rejected with a clear error
-- [ ] Webhook: signed payloads for 2+ distinct configured secrets each resolve to the correct product; unmatched signature → 401 with a diagnostic log line — ⚠️ likely blocked on real/sandbox verification until a second Freemius product actually exists (same constraint as Phase 5.6)
-- [ ] Ticket creation (Portal + Launcher): dropdown lists correct products, submitted ticket carries correct `product_id`, tier resolution/guard matrix behave correctly per product
-- [ ] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified
-- [ ] Backfill: two products' backfills run independently without cross-contaminating progress
-- [ ] Regression: a simulated old single-product install's settings migrate to a working one-entry `products` list with no behavior change
+- [x] Settings: add/remove product rows, save, reload → persisted correctly; duplicate-secret save is rejected with a clear error — verified in 6.1
+- [ ] Webhook: signed payloads for 2+ distinct configured secrets each resolve to the correct product; unmatched signature → 401 with a diagnostic log line — verified in 6.2 against real configured secrets; real/sandbox Freemius event delivery still ⚠️ pending (same constraint as Phase 5.6)
+- [x] Ticket creation (Portal + Launcher): dropdown lists correct products, submitted ticket carries correct `product_id`, tier resolution/guard matrix behave correctly per product — verified in 6.3 (backend/REST contract only; dropdown's on-screen rendering not yet visually confirmed in a browser, no Playwright this session)
+- [ ] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified — 6.4 not started
+- [ ] Backfill: two products' backfills run independently without cross-contaminating progress — 6.5 not started
+- [x] Regression: a simulated old single-product install's settings migrate to a working one-entry `products` list with no behavior change — verified in 6.1
+- [x] Magic-link sign-in: a customer with tickets under 2+ products can sign in once and see all of them — verified in 6.6 (added to Phase 6 Acceptance since it wasn't part of the original 5-item list)
 
-### Next step
+### Current status (2026-07-05)
 
-**Do not write any code until the user explicitly says so** (per instruction, 2026-07-05) — this section is the approved design; implementation planning (task breakdown via the writing-plans skill) is the next step once the user reviews this written spec.
+6.1, 6.2, 6.3, and 6.6 are complete and verified (PHP CLI + live HTTP, no Playwright this session). 6.4 (admin product badges/filter) and 6.5 (per-product backfill) remain. Working one task group at a time per the user's instruction — implementation continues only when explicitly told to proceed.
 
 ---
 
