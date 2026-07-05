@@ -1124,6 +1124,12 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - Contacts: Product column renders "Theme A" for real contacts and "Product #1 (removed)" for the one legacy stale-product contact, exactly as designed; Product filter dropdown present; the backfill shortcut now correctly links to Settings.
 - Settings → Freemius: all 3 products render with independent Label/Product ID/API Token/Secret Key/Contact Backfill rows, each showing "Status: Idle"; clicking "+ Add Product" correctly clones a 4th blank row with **no** Backfill control (since it has no saved `product_id` yet, matching the designed gating) and placeholder text.
 
+### Bugfix — Inbox unread pill shown on closed tickets (2026-07-05, unrelated to Phase 6 scope)
+
+User spotted the Inbox header badge ("5") not matching a hand-count of tickets showing a blue unread pill (6). Root-cause investigated (not a Phase 6 regression): the header badge is `count_open_tickets()` — "how many tickets are not resolved/closed" — and always has been; the per-row pill is `unread_customer_count` — "does this ticket have an unread customer message" — computed independently of status. Live-tested the read-marking mechanism itself (`mark_customer_messages_read()`, called on `GET /admin/tickets/{id}`) and confirmed it works correctly today. The actual anomaly: 4 old QA test tickets (#9–#12, closed) had customer messages that were inserted directly by test scripts and never went through the real "click to preview" flow, so they were stuck `read_at IS NULL` even after being closed — a terminal state that should never show an actionable "unread" indicator.
+
+**User's chosen fix (out of 3 options offered):** closed tickets should never show an unread pill. Implemented as a one-line query change — `STCRM_Database::get_admin_tickets()`'s `unread_customer_count` subquery now excludes `status = 'closed'` — which fixes both future closures and retroactively clears the 4 stale QA tickets (no separate backfill needed, since the fix is query-level, not data-level). Verified via REST call (all 4 previously-stale tickets now report `unread_customer_count: 0`) and a fresh Playwright screenshot of the Inbox confirming no closed ticket shows a pill.
+
 ---
 
 ## Summary

@@ -1,7 +1,7 @@
 # SublimeCRM — Project Knowledge Base
 
 > Complete reference for Claude Code. Read this before touching any file in this folder.
-> Last updated: 2026-07-05 (Phase 6 design brainstormed + approved, commit `225a3e4` — multi-product Freemius support fully designed, no code yet; see §17 and §21)
+> Last updated: 2026-07-05 (Phase 6 complete — multi-product Freemius support fully implemented + visually verified via Playwright; plus a post-Phase-6 Inbox unread-pill bugfix; see §11, §17, §21)
 
 ---
 
@@ -295,12 +295,13 @@ All sends queued via Action Scheduler. **Debounce: max 1 customer notification p
 ## 11. Admin UI — Screen Reference
 
 ### Inbox
-- Page title "Support Inbox" + "6 open" pill
-- Filter toolbar: Status / Priority / Tier / Assignee selects + search input
+- Page title "Support Inbox" + "6 open" pill — this pill is the **open ticket count** (`count_open_tickets()`, status not in resolved/closed), not an unread count; it is not meant to equal a hand-count of rows showing an unread pill (bugfix note below)
+- Filter toolbar: Status / Priority / Tier / Assignee / Product (Phase 6.4, only shown with 2+ configured products) selects + search input
 - Split panel (fixed 600px height): **384px list** (fixed) | **reading pane** (flex)
-- List item: Tier badge + Critical badge if critical + `#id · time` kicker (mono 10px uppercase) + subject (13.5px/600) + who—preview (clamped 1 line) + Status badge + priority badge + unread pill
+- List item: Product badge (Phase 6.4) + Tier badge + Critical badge if critical + `#id · time` kicker (mono 10px uppercase) + subject (13.5px/600) + who—preview (clamped 1 line) + Status badge + priority badge + unread pill
 - Active item: `#f0f6fc` bg + 3px left `--wp-blue` border
 - Default sort ("Smart"): floats `verified=1` + priority
+- **Bugfix (2026-07-05):** the unread pill (`unread_customer_count`) no longer counts unread messages on `closed` tickets — a closed ticket is terminal, so a customer message left unread when it closed (e.g. via old test data that never went through the real UI flow) should never surface as an actionable indicator. Fixed as a query-level exclusion in `STCRM_Database::get_admin_tickets()`, so it also retroactively cleared stale historical data with no separate backfill needed.
 
 ### Thread
 - Back button + "Ticket #id" kicker; subject as page title
@@ -460,7 +461,7 @@ Defined in `:root` of `design/Support CRM.html`. These are the production values
 | 3 — Touchpoints | ✅ Complete (2026-06-27) | `sublime-crm/support-portal` block + classic page template; portal views (form, my-tickets, thread, magic-link auth); floating launcher + native panel | Customer can open ticket from launcher with email alone, get auto-verified, hit turn limit, resume via emailed link |
 | 4 — Notifications & hardening | ✅ Complete (2026-06-27) | 4.1–4.8 ✅ complete. 4.9 = production ops (no code). 4.10 = removed. QA pass applied: portal-URL transient cache (DAY_IN_SECONDS, bust on save_post), email header injection prevention (CR/LF strip), esc_like added to Launcher, salt-rotation warning in Settings (Freemius tab), dead ViewStub removed from portal App.jsx, auto-close insert error guard. | Reply notice lands in inbox (not spam) with working deep link; abuse attempts throttled |
 | 5 — Design-Handoff Gap Closure | ✅ Complete (2026-07-04) | 11 confirmed gaps found via full audit vs. design handoff (see §18). 5.1–5.10 built + Playwright/end-to-end verified; 5.11 ("Lifetime value") explicitly marked out of scope — no spec backing, no payment data captured anywhere, would need a real sub-feature (refund handling, backfill, migration) to build correctly. Full task breakdown in `phase-plan-clickup.md` Phase 5 (5.1–5.11). | All 11 gaps resolved or explicitly marked out-of-scope with reasoning — **done** |
-| 6 — Multi-Product Freemius Support | 📐 Designed (2026-07-05), no code yet | Brainstormed with user: settings become a repeatable product list; webhook resolves the signing secret via hybrid brute-force matching (+ best-effort payload parse for log-only diagnostics); ticket forms get an explicit product dropdown (no pseudo-product for pre-sale — uses existing `category` field instead); admin screens gain product badges/filters; backfill becomes per-product. Full 6.1–6.5 task checklist in `phase-plan-clickup.md` Phase 6, commit `225a3e4`. **Awaiting explicit user go-ahead before any implementation.** | Scoped: 5 task groups, ~25 tasks |
+| 6 — Multi-Product Freemius Support | ✅ Complete (2026-07-05), visually verified via Playwright | Settings stores a repeatable `products` list (dynamic add/remove rows, save-time duplicate-secret guard, one-time migration from the old flat fields); webhook resolves the signing secret via hybrid brute-force matching (+ best-effort payload parse for log-only diagnostics); ticket forms (Portal + Launcher) get an explicit product dropdown backed by a new `GET /products` endpoint; admin Inbox/Contacts/Thread/Contact-Detail all show/filter by product; backfill runs independently per product. **6.6 (not in original scope, surfaced mid-6.3):** magic-link sign-in is now email-scoped, spanning every contact a customer has across products. Three live bugs predating this phase were found and fixed along the way, all sharing one root cause (a consumer of the old single-product model not in the design doc's named-files list): magic-link sign-in (6.6), admin Inbox/Contacts (6.4), and the Contacts page's backfill shortcut (found during the Playwright pass). Full 6.1–6.6 task checklist + verification notes in `phase-plan-clickup.md` Phase 6. | All 6.1–6.6 done — **done** |
 
 ---
 
@@ -549,5 +550,5 @@ Run in order when pushing to production:
 | Newsletter composer | Same SMTP pipe + contacts table |
 | Attachments | Deliberately out of v1 |
 | Two-way email piping | Needs inbound webhook (Postmark/Mailgun) |
-| Multi-product UI | **Fully designed (2026-07-05), promoted to Phase 6 — no longer a deferred-features line item once implemented.** Schema is scoped by `product_id` everywhere, but the *application* only ever supported one Freemius product. Design (brainstormed + approved with the user, commit `225a3e4`): Settings becomes a repeatable `[{product_id, label, secret_key, api_token}]` list with dynamic add/remove rows; webhook resolves the signing secret by brute-force matching against all configured secrets (never trusting an unverified payload field for that decision), with a best-effort payload parse used only for diagnostic log lines when nothing matches; ticket forms (Portal + Launcher) get an explicit "which product?" dropdown — auto-detection was considered and rejected as ambiguous for customers owning 2+ products; pre-sale questions use the existing `category` field rather than a fake pseudo-product. Full 6.1–6.5 task checklist in `phase-plan-clickup.md` Phase 6. **Design approved, implementation not started — awaiting explicit user go-ahead.** |
+| ~~Multi-product UI~~ | ✅ **Built — see §17 Phase 6 (complete 2026-07-05).** No longer deferred; was designed then fully implemented as Phase 6 (6.1–6.6). |
 | Realtime transport | Swap polling for WebSocket service; endpoints unchanged |
