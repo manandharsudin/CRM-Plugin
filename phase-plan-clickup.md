@@ -1069,13 +1069,22 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - Rebuilt via `npm run build` (`stcrm-inbox.js` 7.32 KiB, `stcrm-thread.js` 10.8 KiB).
 - **Verified (2026-07-05):** `GET /admin/tickets` (no filter) now returns real tickets with correct `product_id`/`product_label` (previously `[]`); `GET /admin/tickets?product_id=789012` correctly scopes to just that product; `GET /admin/contacts` returns contacts with `product_id`/`product_label`, including a legacy contact with a stale `product_id=1` correctly showing `product_label: null` (frontend renders this as "Product #1 (removed)"). Contacts admin page HTML confirmed the Product column renders "Theme A" for real contacts and "Product #1 (removed)" for the stale one. Contact Detail page for a real contact now shows its ticket history (previously always "No tickets yet") plus a "Product: Theme A" profile row. Inbox page HTML confirmed the Product filter `<select>` renders with all 3 configured products. **Not visually confirmed in a browser** — no Playwright this session; the React-rendered `ProductBadge` on Inbox rows/reading pane and the Thread header is confirmed correct at the data-contract level (REST responses carry the right fields) but not screenshotted.
 
-### 6.5 Backfill: Per-Product
+### 6.5 Backfill: Per-Product ✅ Complete (2026-07-05)
 
-- [ ] Replace global `stcrm_backfill_last_page` / `stcrm_backfill_total` options with per-product keys (`..._{product_id}`)
-- [ ] `stcrm_run_backfill_page` AS job gains a `product_id` argument; reads that product's `api_token` from the settings list instead of one global token
-- [ ] Settings "Backfill" button (6.1) becomes one button + one progress meter per product row (reuses the existing Phase 5.1 progress-meter UI pattern, just parameterized)
-- [ ] Two products' backfills can run concurrently without interfering (disjoint option keys, disjoint AS job args)
-- Files: `includes/Services/class-stcrm-backfill.php`, `admin/class-stcrm-settings.php`
+- [x] Replace global `stcrm_backfill_last_page` / `stcrm_backfill_total` options with per-product keys (`..._{product_id}`)
+- [x] `stcrm_run_backfill_page` AS job gains a `product_id` argument; reads that product's `api_token` from the settings list instead of one global token
+- [x] Settings "Backfill" button (6.1) becomes one button + one progress meter per product row (reuses the existing Phase 5.1 progress-meter UI pattern, just parameterized)
+- [x] Two products' backfills can run concurrently without interfering (disjoint option keys, disjoint AS job args)
+- Files: `includes/Services/class-stcrm-backfill.php`, `admin/class-stcrm-settings.php`, `admin/js/stcrm-settings.js`, `includes/class-sublime-crm.php`
+
+**This completes Phase 6 — all 6.1–6.6 task groups done.**
+
+**Implementation notes (2026-07-05):**
+- `STCRM_Backfill`'s three option-key constants became prefixes (`..._last_page_`, `..._status_`, `..._total_`), all now suffixed with `{product_id}` at every read/write site. `process_page( int $page, int $product_id )` gained the `$product_id` parameter (AS hook re-registered with `accepted_args = 2` in `class-sublime-crm.php`); new private `find_product( int $product_id ): ?array` looks up that specific product's row (label + encrypted secret/token) from Settings, replacing the old single flat-field read. `handle_trigger()` now reads `product_id` from the request, `wp_die()`s if it doesn't match any configured product (defense against a stale/tampered link), and both resets and re-triggers only that product's state.
+- `get_status()`, `get_last_page()`, `get_total()`, `get_progress()` all now take `int $product_id` — no more implicit single-install-wide state.
+- `admin/class-stcrm-settings.php` `render_product_row()`: the "Contact Backfill" row (removed from the page in 6.1, deliberately deferred here) is back — one "Run Backfill" button + one progress-meter container per row, only rendered once a row has a saved `product_id` (a brand-new unsaved row has nothing to back-fill yet). Container IDs are `stcrm-backfill-progress-{product_id}` with a `data-product-id` attribute so JS can target and poll the right one.
+- `admin/js/stcrm-settings.js`: `initBackfillProgress()` now queries all `.stcrm-backfill-progress` containers (was a single `getElementById`) and polls each independently; the per-tick timer moved from a shared module-level variable to a property on each container element (`container._backfillTimer`), so two products' poll loops can't clobber each other. Each poll POSTs its own `product_id` alongside the existing shared nonce.
+- **Verified (2026-07-05)** against the 3 real configured products: `process_page(1, 123456)` (Theme A, blank `api_token`) correctly short-circuited to `error_missing_credentials` without any API call; `process_page(1, 789012)` (Theme B, a test token from earlier 6.1 verification) correctly proceeded to *attempt* a real Freemius API call using Theme B's own token (failed on an unrelated local-environment SSL/curl issue, not a code bug) — confirming each product's own credentials are read independently, not a shared/global one. Confirmed via direct DB query that the two products wrote to fully disjoint option rows (`stcrm_backfill_status_123456` vs. `_789012`) with no cross-contamination. **Live HTTP round-trip** against `admin-post.php?action=stcrm_run_backfill`: an unconfigured `product_id=999999` correctly `wp_die()`s (500, request rejected before touching any state); a valid `product_id=123456` correctly 302-redirects to Settings and queues `stcrm_run_backfill_page` with args `[1, 123456]` (confirmed via the Action Scheduler actions table). Also found and removed one inert leftover option (`stcrm_backfill_status`, no product suffix) from pre-6.5 testing — already covered by `uninstall.php`'s wildcard `stcrm\_%` cleanup regardless, so no migration code was needed. All test options/AS jobs cleaned up after verification.
 
 ### 6.6 Email-Scoped Sessions (Magic-Link Sign-In Fix) ✅ Complete (2026-07-05)
 
@@ -1100,13 +1109,13 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - [ ] Webhook: signed payloads for 2+ distinct configured secrets each resolve to the correct product; unmatched signature → 401 with a diagnostic log line — verified in 6.2 against real configured secrets; real/sandbox Freemius event delivery still ⚠️ pending (same constraint as Phase 5.6)
 - [x] Ticket creation (Portal + Launcher): dropdown lists correct products, submitted ticket carries correct `product_id`, tier resolution/guard matrix behave correctly per product — verified in 6.3 (backend/REST contract only; dropdown's on-screen rendering not yet visually confirmed in a browser, no Playwright this session)
 - [x] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified — 6.4 (also fixed a live bug: admin Inbox/Contacts had returned zero results since 6.1, see 6.4 notes)
-- [ ] Backfill: two products' backfills run independently without cross-contaminating progress — 6.5 not started
+- [x] Backfill: two products' backfills run independently without cross-contaminating progress — verified in 6.5
 - [x] Regression: a simulated old single-product install's settings migrate to a working one-entry `products` list with no behavior change — verified in 6.1
 - [x] Magic-link sign-in: a customer with tickets under 2+ products can sign in once and see all of them — verified in 6.6 (added to Phase 6 Acceptance since it wasn't part of the original 5-item list)
 
 ### Current status (2026-07-05)
 
-6.1, 6.2, 6.3, 6.4, and 6.6 are complete and verified (PHP CLI + live HTTP, no Playwright this session). Only 6.5 (per-product backfill) remains. Working one task group at a time per the user's instruction — implementation continues only when explicitly told to proceed.
+**Phase 6 is complete.** 6.1, 6.2, 6.3, 6.4, 6.5, and 6.6 are all done and verified (PHP CLI + live HTTP round-trips throughout, no Playwright available this session — nothing was confirmed via an actual rendered browser screenshot, only REST/HTML-level checks). Two live bugs were found and fixed along the way that predated this phase's own scope: magic-link sign-in (6.6) and the admin Inbox/Contacts pages (6.4) had both been silently broken since 6.1 landed, until each was caught and fixed in its own task group.
 
 ---
 
