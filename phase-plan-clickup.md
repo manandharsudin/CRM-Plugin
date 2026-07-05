@@ -1115,7 +1115,14 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 
 ### Current status (2026-07-05)
 
-**Phase 6 is complete.** 6.1, 6.2, 6.3, 6.4, 6.5, and 6.6 are all done and verified (PHP CLI + live HTTP round-trips throughout, no Playwright available this session — nothing was confirmed via an actual rendered browser screenshot, only REST/HTML-level checks). Two live bugs were found and fixed along the way that predated this phase's own scope: magic-link sign-in (6.6) and the admin Inbox/Contacts pages (6.4) had both been silently broken since 6.1 landed, until each was caught and fixed in its own task group.
+**Phase 6 is complete and now visually verified in a real browser.** 6.1–6.6 were all verified via PHP CLI + live HTTP round-trips during implementation; a Playwright environment (Chromium + Node) was then set up specifically to screenshot and interact with the Inbox, Contacts, and Settings pages, closing the "not visually confirmed" gap noted throughout this phase.
+
+**One more live bug found and fixed during this visual pass:** the Contacts page's top-level "Run Freemius backfill" shortcut (`admin/class-stcrm-admin.php::render_contacts_page()`) still linked straight to `admin-post.php?action=stcrm_run_backfill` with no `product_id` — a pre-6.5 leftover that `handle_trigger()` (now requiring `product_id`) would have rejected with a fatal `wp_die()`. Fixed by pointing this shortcut at Settings → Freemius (where the correctly product_id-scoped "Run Backfill" buttons from 6.5 live) instead of firing an ambiguous untargeted action — this is the third live bug caught in this phase (after 6.4's admin Inbox/Contacts and 6.6's magic-link sign-in), all three sharing the same root cause: a consumer of the old single-product model that wasn't in the design doc's originally-named list of affected files.
+
+**Visual verification confirmed (2026-07-05, screenshots taken):**
+- Inbox: 12 real tickets render with correct "Theme A" product badges; Product filter dropdown present and functional (selecting "Theme B" correctly narrows to "0 tickets" / "No tickets found", clearing it restores "12 tickets"); zero console errors.
+- Contacts: Product column renders "Theme A" for real contacts and "Product #1 (removed)" for the one legacy stale-product contact, exactly as designed; Product filter dropdown present; the backfill shortcut now correctly links to Settings.
+- Settings → Freemius: all 3 products render with independent Label/Product ID/API Token/Secret Key/Contact Backfill rows, each showing "Status: Idle"; clicking "+ Add Product" correctly clones a 4th blank row with **no** Backfill control (since it has no saved `product_id` yet, matching the designed gating) and placeholder text.
 
 ---
 
