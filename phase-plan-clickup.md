@@ -1050,13 +1050,24 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 
 **⚠️ Finding surfaced during 6.3:** `STCRM_Auth_Controller::request_magic_link()` still read the deleted flat `freemius_product_id` setting, so magic-link sign-in was broken for everyone (not just multi-product). This wasn't in the original 6.1–6.5 scope — **resolved as its own brainstormed sub-task, see 6.6 below.**
 
-### 6.4 Admin UI: Product Visibility
+### 6.4 Admin UI: Product Visibility ✅ Complete (2026-07-05)
 
-- [ ] Inbox: Product badge on each list row (label looked up by `ticket.product_id`); Product filter `<select>` in the toolbar alongside Status/Priority/Tier/Assignee; `GET /admin/tickets?product_id=` filter param
-- [ ] Contacts: Product column in the table (same label lookup by `contact.product_id`)
-- [ ] Thread header / Contact detail: product label shown alongside existing badges
-- [ ] Stale product handling: a ticket/contact referencing a `product_id` no longer in Settings shows `"Product #12345 (removed)"` — labels are looked up live server-side, never denormalized onto the ticket/contact row
-- Files: `src/admin/inbox.jsx`, `admin/class-stcrm-admin.php`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/thread.jsx`, admin Contacts templates, `admin/css/stcrm-admin.css`
+- [x] Inbox: Product badge on each list row (label looked up by `ticket.product_id`); Product filter `<select>` in the toolbar alongside Status/Priority/Tier/Assignee; `GET /admin/tickets?product_id=` filter param
+- [x] Contacts: Product column in the table (same label lookup by `contact.product_id`)
+- [x] Thread header / Contact detail: product label shown alongside existing badges
+- [x] Stale product handling: a ticket/contact referencing a `product_id` no longer in Settings shows `"Product #12345 (removed)"` — labels are looked up live server-side, never denormalized onto the ticket/contact row
+- Files: `src/admin/inbox.jsx`, `admin/class-stcrm-admin.php`, `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/thread.jsx`, `admin/css/stcrm-admin.css`
+
+**⚠️ Bug found and fixed as part of this task — the admin Inbox and Contacts pages were completely broken since 6.1 landed.** `STCRM_Admin_Controller::get_tickets()`/`get_contacts()` and `STCRM_Admin::render_contacts_page()`/`render_inbox_page()`/`render_contact_detail_page()` all still hardcoded `absint( STCRM_Settings::get_setting( 'freemius_product_id' ) )` — a setting deleted in 6.1 — so every one of these resolved `product_id = 0`, and since `get_admin_tickets()`/`get_admin_contacts()`/`get_tickets_by_contact()` filter strictly by `product_id = %d`, **every admin ticket/contact list returned empty** (no real row has `product_id = 0`). This wasn't caught by 6.1/6.2/6.3/6.6's own verification because none of those touched the admin REST routes or PHP-rendered pages. Confirmed via a live REST call before the fix: `GET /admin/tickets` returned `[]` despite real tickets existing with `product_id = 123456`.
+
+**Implementation notes (2026-07-05):**
+- `STCRM_Database`: `get_admin_tickets()`, `get_admin_contacts()`, `count_contacts()`, `get_contacts_last_updated()`, `count_open_tickets()` all take a nullable `?int $product_id` now — `null` means "across all configured products" (the new default), a real value narrows to one (the Inbox/Contacts filter). All five also `SELECT` `product_id` where they didn't already.
+- `STCRM_Admin_Controller`: `get_tickets()`/`get_contacts()` read an optional `product_id` REST filter arg (via new `get_product_id_filter()`) instead of the hardcoded setting. New `resolve_product_label()` looks up a product_id against the live `products` Settings list, returning `null` if it's been removed since — `format_ticket_list_item()`, `format_ticket()`, and `format_contact()` all now include `product_id` + `product_label`.
+- `STCRM_Admin`: `render_inbox_page()` — open-count badge now always spans all products (`count_open_tickets( null )`, independent of whatever filter is selected); Product `<select>` added to the toolbar, **only rendered when 2+ products are configured** (matches the established "don't add a control nobody needs" judgment call from 5.9's category-filter decision). `render_contacts_page()` — same optional `product_id` filter (via `$_GET`), Product column (also gated on 2+ products), own `resolve_product_label()` (PHP-page variant returns the final "Product #N (removed)" string directly rather than null, since there's no frontend JS layer to format it). `render_contact_detail_page()` — **the ticket-history "No tickets yet" bug is fixed by using `$contact->product_id` directly** (the contact already knows its own product — no Settings lookup needed at all here), plus a new "Product" row on the profile card.
+- `src/admin/inbox.jsx` — `product_id` added to the generic filter-wiring pattern (already fully generic via `Object.entries(filters)`, so this was a 2-line addition); new `ProductBadge` shown on both ticket rows and the reading pane header.
+- `src/admin/thread.jsx` — same `ProductBadge` added to the Thread header, next to `CategoryBadge`.
+- Rebuilt via `npm run build` (`stcrm-inbox.js` 7.32 KiB, `stcrm-thread.js` 10.8 KiB).
+- **Verified (2026-07-05):** `GET /admin/tickets` (no filter) now returns real tickets with correct `product_id`/`product_label` (previously `[]`); `GET /admin/tickets?product_id=789012` correctly scopes to just that product; `GET /admin/contacts` returns contacts with `product_id`/`product_label`, including a legacy contact with a stale `product_id=1` correctly showing `product_label: null` (frontend renders this as "Product #1 (removed)"). Contacts admin page HTML confirmed the Product column renders "Theme A" for real contacts and "Product #1 (removed)" for the stale one. Contact Detail page for a real contact now shows its ticket history (previously always "No tickets yet") plus a "Product: Theme A" profile row. Inbox page HTML confirmed the Product filter `<select>` renders with all 3 configured products. **Not visually confirmed in a browser** — no Playwright this session; the React-rendered `ProductBadge` on Inbox rows/reading pane and the Thread header is confirmed correct at the data-contract level (REST responses carry the right fields) but not screenshotted.
 
 ### 6.5 Backfill: Per-Product
 
@@ -1088,14 +1099,14 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - [x] Settings: add/remove product rows, save, reload → persisted correctly; duplicate-secret save is rejected with a clear error — verified in 6.1
 - [ ] Webhook: signed payloads for 2+ distinct configured secrets each resolve to the correct product; unmatched signature → 401 with a diagnostic log line — verified in 6.2 against real configured secrets; real/sandbox Freemius event delivery still ⚠️ pending (same constraint as Phase 5.6)
 - [x] Ticket creation (Portal + Launcher): dropdown lists correct products, submitted ticket carries correct `product_id`, tier resolution/guard matrix behave correctly per product — verified in 6.3 (backend/REST contract only; dropdown's on-screen rendering not yet visually confirmed in a browser, no Playwright this session)
-- [ ] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified — 6.4 not started
+- [x] Admin: Inbox product badge + filter, Contacts product column, stale "(removed)" label all verified — 6.4 (also fixed a live bug: admin Inbox/Contacts had returned zero results since 6.1, see 6.4 notes)
 - [ ] Backfill: two products' backfills run independently without cross-contaminating progress — 6.5 not started
 - [x] Regression: a simulated old single-product install's settings migrate to a working one-entry `products` list with no behavior change — verified in 6.1
 - [x] Magic-link sign-in: a customer with tickets under 2+ products can sign in once and see all of them — verified in 6.6 (added to Phase 6 Acceptance since it wasn't part of the original 5-item list)
 
 ### Current status (2026-07-05)
 
-6.1, 6.2, 6.3, and 6.6 are complete and verified (PHP CLI + live HTTP, no Playwright this session). 6.4 (admin product badges/filter) and 6.5 (per-product backfill) remain. Working one task group at a time per the user's instruction — implementation continues only when explicitly told to proceed.
+6.1, 6.2, 6.3, 6.4, and 6.6 are complete and verified (PHP CLI + live HTTP, no Playwright this session). Only 6.5 (per-product backfill) remains. Working one task group at a time per the user's instruction — implementation continues only when explicitly told to proceed.
 
 ---
 
