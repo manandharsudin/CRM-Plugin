@@ -995,13 +995,25 @@ The DB schema was built multi-product-ready from day one — every row in `wp_st
 - **Admin visibility: badge + filter.** Now that tickets/contacts span multiple products, Inbox and Contacts need to show which product each row belongs to, and Inbox needs a Product filter — otherwise the support team has no way to triage by product.
 - **Spec location:** this section of `phase-plan-clickup.md`, matching the established Phase 5 pattern, rather than a separate spec file.
 
-### 6.1 Settings: Multi-Product Data Model
+### 6.1 Settings: Multi-Product Data Model ✅ Complete (2026-07-05)
 
-- [ ] Replace flat `freemius_product_id` / `freemius_secret_key` / `freemius_api_token` fields with `$settings['products'] = [{product_id, label, secret_key, api_token}, ...]`
-- [ ] Settings → Freemius tab: dynamic add/remove rows (JS-driven, no arbitrary slot cap), one "Backfill" button per row (see 6.5)
-- [ ] Save-time guard: reject the save with a clear error if two product rows have an identical `secret_key` (prevents ambiguous matches in 6.2's brute-force loop)
-- [ ] **Migration:** on first load after upgrade, if `products` is empty but the old flat fields are set, auto-convert into a single-entry list. Idempotent — skip entirely if `products` is already non-empty (already migrated, or admin populated it manually). No DB data migration needed — `product_id` is already correct on every existing ticket/contact row.
+- [x] Replace flat `freemius_product_id` / `freemius_secret_key` / `freemius_api_token` fields with `$settings['products'] = [{product_id, label, secret_key, api_token}, ...]`
+- [x] Settings → Freemius tab: dynamic add/remove rows (JS-driven, no arbitrary slot cap)
+- [x] Save-time guard: reject the save with a clear error if two product rows have an identical `secret_key` (prevents ambiguous matches in 6.2's brute-force loop)
+- [x] **Migration:** on first load after upgrade, if `products` is empty but the old flat fields are set, auto-convert into a single-entry list. Idempotent — skip entirely if `products` is already non-empty. No DB data migration needed.
 - Files: `admin/class-stcrm-settings.php`, `admin/js/stcrm-settings.js`, `admin/css/stcrm-admin.css`
+
+**Implementation notes (2026-07-05):**
+- `STCRM_Settings::$defaults['products']` replaces the 3 flat keys. `maybe_migrate_products()` (private static, called from `get_settings()`) converts the old fields into a one-entry list and persists it via `update_option()` — runs once, short-circuits immediately afterward since it only fires when `products` is empty. Old encrypted `secret_key`/`api_token` ciphertext is carried over as-is (no decrypt/re-encrypt needed).
+- New `render_product_row( $key, $product )` renders one repeatable row (Label, Product ID, API Token, Secret Key, Remove button). Existing rows use their real array index as `$key`; a hidden `<template id="stcrm-product-row-template">` (key placeholder `__INDEX__`) is cloned by JS for new rows.
+- `admin/js/stcrm-settings.js` `initProductRows()`: "Add Product" clones the template and replaces `__INDEX__` with a `new_N` counter key; "Remove" uses event delegation on `#stcrm-products-list` since rows are added dynamically after page load.
+- **Row identity on save:** no drag-reorder exists, so a submitted row's key (its original position, or `new_N`) reliably maps back to its pre-save counterpart. `build_products_from_post()` (private static) looks up `$existing_products[$key]` for the "keep saved secret/token if the password field was left blank" fallback — works for original numeric-position keys, and correctly finds nothing (blank stays blank) for genuinely new `new_N` rows. Rows with an empty `product_id` are dropped.
+- **Duplicate-secret guard:** `has_duplicate_secret()` compares **decrypted plaintext**, not ciphertext — `STCRM_Encryption::encrypt()` uses a random IV per call, so two rows sharing one secret would never produce equal ciphertext even though the plaintext matches. On a duplicate, the save is aborted (redirect with `error=duplicate_secret`, option left untouched) before `update_option()` is ever called.
+- Removed the single global "Run Backfill" button + progress meter from the Freemius tab in this same commit — it targeted the one now-deleted flat `api_token`/`product_id` setting and would otherwise silently break. Per-product backfill (button + progress meter per row) returns in 6.5; `render_backfill_progress_markup()` is left in place unused, to be reused rather than rewritten there.
+- **Verified (2026-07-05):**
+  - PHP CLI: migration runs correctly against the real dev option (old flat fields → `products[0]`, secret decrypts intact, idempotent on a second call — no further writes).
+  - PHP CLI (reflection): `build_products_from_post()` — existing row with blank password fields keeps its old encrypted secret/token, brand-new row's own values are freshly encrypted, blank-`product_id` rows are dropped. `has_duplicate_secret()` — correctly flags two rows sharing one secret (even with different ciphertext/IV), correctly allows distinct secrets, correctly ignores rows with no secret configured yet.
+  - HTTP end-to-end (authenticated admin cookies + a correctly-derived nonce, generated via `wp_generate_auth_cookie()`/`WP_Session_Tokens`, no Playwright available this session): GET the Freemius tab → renders the migrated product row + Add-Product button + hidden template. POST a save with an existing row (blank password fields) + a new row (own secret/token) → 302 to `?saved=1`; confirmed via `get_settings()` that the existing secret was preserved and the new row's values were correctly encrypted. POST a save where the new row's secret duplicates the existing row's secret → 302 to `?error=duplicate_secret`, option left completely unchanged, error notice confirmed present in the re-rendered page HTML.
 
 ### 6.2 Webhook: Hybrid Secret Resolution
 
