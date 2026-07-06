@@ -1357,13 +1357,20 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 - Docs commit ✅ pushed (2026-07-06) — this section + docs-repo CLAUDE.md.
 - **Next: 9.2 (Settings "Advanced" Tab) — only start when the user explicitly says go.**
 
-### 9.2 Settings "Advanced" Tab — Not started
+### 9.2 Settings "Advanced" Tab — ✅ Complete (2026-07-06)
 
-- [ ] Fourth Settings tab (Freemius / Email / Tickets & Guards / **Advanced**).
-- [ ] `logging_enabled` checkbox, default `0` (off) — description notes logs may include contact emails/ticket subjects.
-- [ ] `delete_on_uninstall` checkbox moved verbatim from Tickets & Guards (same key, same behavior, relocated only).
-- [ ] `handle_save()` gains an `'advanced'` case validating/saving both fields.
+- [x] Fourth Settings tab (Freemius / Email / Tickets & Guards / **Advanced**).
+- [x] `logging_enabled` checkbox, default `0` (off) — description notes logs may include contact emails/ticket subjects.
+- [x] `delete_on_uninstall` checkbox moved verbatim from Tickets & Guards (same key, same behavior, relocated only).
+- [x] `handle_save()` gains an `'advanced'` case validating/saving both fields.
 - Files: `admin/class-stcrm-settings.php` (`$defaults`, `render_page()` new tab markup + removal from Tickets & Guards, `handle_save()`)
+
+**Implementation notes (2026-07-06):** `render_page()`'s tab conditional was a simple `if ('freemius') / elseif ('email') / else (tickets)` chain — adding a 4th tab required converting the bare `else` into an explicit `elseif ('tickets' === $active_tab)` before adding the new `else` (advanced) branch, since a plain `else` can't be followed by another arm. The `Uninstall` `<tr>` was moved (not duplicated) out of the Tickets & Guards table into the new Advanced table, and `delete_on_uninstall` was moved in `$defaults`' comment grouping and out of the `'tickets'` case in `handle_save()` into the new `'advanced'` case.
+
+**Verified (2026-07-06):** Live `curl` fetch of both tabs confirmed "Uninstall" no longer appears anywhere on the Tickets & Guards tab (0 matches) and both "Debug Logging" + "Uninstall" render correctly on the new Advanced tab, with the nav bar showing all 4 tabs and "Advanced" correctly marked active. Live save round-trips: both fields ON → persisted as `1`/`1`; both fields OFF (unchecked, absent from POST) → persisted as `0`/`0`; a follow-up fetch confirmed the checkbox `checked` state matches exactly what was last saved. **Explicitly re-confirmed the product list (`products`, 3 real rows with encrypted credentials) stayed untouched across every one of these saves** — the exact class of mistake caught during 8.1's verification (wrong tab field name silently routing into the Freemius case) — this time using the correct `stcrm_tab=advanced` value throughout. Settings restored to their real safe defaults (`logging_enabled=0`, `delete_on_uninstall=0`) afterward; test session tokens cleaned up.
+- Plugin commit `f4505c9` ✅ pushed (2026-07-06) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit ✅ pushed (2026-07-06) — this section + docs-repo CLAUDE.md.
+- **Next: 9.3 (Instrument Call Sites) — only start when the user explicitly says go.**
 
 ### 9.3 Instrument Call Sites — Not started
 
@@ -1405,5 +1412,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
-| 9 — Debug Logger | — | 3 items — 9.1 ✅ complete (2026-07-06), 9.2/9.3 not started | 3 tasks |
+| 9 — Debug Logger | — | 3 items — 9.1/9.2 ✅ complete (2026-07-06), 9.3 not started | 3 tasks |
 | **Total** | **10 weeks + gap closure** | **58 groups** | **~220 tasks** |
