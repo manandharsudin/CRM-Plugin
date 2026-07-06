@@ -1328,6 +1328,64 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 ---
 
+## PHASE 9 — Debug Logger
+
+> User request (2026-07-06): a centralized logger for debugging, covering "each action" in the plugin with structured context, timestamped in Asia/Kathmandu regardless of server/site timezone. Plus a new Settings "Advanced" tab housing a logging enable/disable toggle and the `delete_on_uninstall` checkbox (moved from Tickets & Guards). Designed via brainstorming session (2026-07-06) — key decisions below.
+
+**Design decisions (confirmed via brainstorming, 2026-07-06):**
+- **Storage:** plain-text file, not a DB table — `wp-content/uploads/sublime-crm-logs/{Y-m-d}.log`, one file per day (date in Kathmandu time). No in-app log viewer — read via FTP/hosting file manager, matching the user's explicit choice over a DB-table+viewer alternative.
+- **Scope:** key state changes only, not every read/GET and not errors-only. See the 8.2/8.3 file list below.
+- **Retention:** 30 days, purged by a new daily cron (`stcrm_purge_old_logs`), same registration pattern as the existing `stcrm_purge_expired_tokens`/`stcrm_auto_close_tickets` crons.
+- **Default state:** logging **disabled** by default (opt-in) — log context may include contact emails/ticket subjects, so no install silently writes customer data to disk without an admin choosing to.
+- **Security:** the log directory gets an `index.php` + `.htaccess` (`Deny from all`) on first write, same pattern most mature WP plugins use to keep a log directory out of direct browser access.
+- **Timezone:** every log line's timestamp is built via `new DateTime('now', new DateTimeZone('Asia/Kathmandu'))` — explicitly Kathmandu, independent of the server's PHP timezone or WordPress's configured site timezone.
+
+### 9.1 Logger Infrastructure — Not started
+
+- [ ] New `includes/Services/class-stcrm-logger.php` — `STCRM_Logger` static facade: `info( string $action, string $message, array $context = [] )`, `warning(...)`, `error(...)`.
+- [ ] Each method no-ops immediately (zero disk I/O) when `STCRM_Settings::get_setting('logging_enabled')` is falsy.
+- [ ] Line format: `[{Y-m-d H:i:s O, Asia/Kathmandu}] [{LEVEL}] {action} — {message}` + ` | context={json}` appended only when `$context` is non-empty.
+- [ ] File path `wp-content/uploads/sublime-crm-logs/{Y-m-d}.log` (Kathmandu date); creates the directory + protection files (`index.php`, `.htaccess`) on first write if missing.
+- [ ] New daily cron `stcrm_purge_old_logs`, scheduled on activation / unscheduled on deactivation (same pattern as `stcrm_purge_expired_tokens`), deletes any `.log` file in the directory older than 30 days.
+- [ ] Write failures (permissions, disk full) are swallowed silently — logging must never break the feature it's observing, matching the existing ad-hoc `log()` methods' behavior.
+- Files: `includes/Services/class-stcrm-logger.php` (new), `includes/class-stcrm-activator.php` (schedule cron), `includes/class-stcrm-deactivator.php` (unschedule cron), `includes/class-sublime-crm.php` (register cron hook + logger instance)
+
+### 9.2 Settings "Advanced" Tab — Not started
+
+- [ ] Fourth Settings tab (Freemius / Email / Tickets & Guards / **Advanced**).
+- [ ] `logging_enabled` checkbox, default `0` (off) — description notes logs may include contact emails/ticket subjects.
+- [ ] `delete_on_uninstall` checkbox moved verbatim from Tickets & Guards (same key, same behavior, relocated only).
+- [ ] `handle_save()` gains an `'advanced'` case validating/saving both fields.
+- Files: `admin/class-stcrm-settings.php` (`$defaults`, `render_page()` new tab markup + removal from Tickets & Guards, `handle_save()`)
+
+### 9.3 Instrument Call Sites — Not started
+
+- [ ] Migrate the 3 existing ad-hoc `error_log()`/`log()` call sites to `STCRM_Logger` instead of running two logging mechanisms in parallel: `STCRM_Freemius_Sync::log()`, `STCRM_Mailer` (`insert_token` failure), `STCRM_Webhook` (signature-mismatch warning).
+- [ ] Add new log calls for state-changing actions only (no reads):
+
+| Action | File / method |
+|---|---|
+| `ticket.created` | `STCRM_Tickets_Controller::create_ticket()` |
+| `ticket.message_added` | `STCRM_Tickets_Controller::create_message()`, `STCRM_Admin_Controller::create_message()` |
+| `ticket.status_changed` | `STCRM_Admin_Controller::update_ticket()` |
+| `webhook.received` / `webhook.signature_result` | `STCRM_Webhook::handle_webhook()` |
+| `webhook.event_processed` | `STCRM_Freemius_Sync::process_event()` + its 5 `handle_*()` methods |
+| `magic_link.requested` | `STCRM_Auth_Controller::request_magic_link()` |
+| `magic_link.redeemed` | `STCRM_Auth_Controller::handle_redemption()` |
+| `tier.resolved` | `STCRM_Tier_Resolver::resolve()` |
+| `email.queued` / `email.sent` / `email.failed` | `STCRM_Mailer`'s 5 `queue_*()` + 5 `handle_*()` methods |
+| `backfill.page_processed` | `STCRM_Backfill::process_page()` |
+| `settings.saved` | `STCRM_Settings::handle_save()` |
+| `connection.tested` | `STCRM_Settings::ajax_test_connection()` |
+
+- Files: all files listed in the table above.
+
+**Testing plan (all 3 sub-items):** direct calls to each new `STCRM_Logger` method confirming correct file path/timezone/format and the disabled-state no-op; a few real end-to-end round trips (create a real ticket, trigger a real webhook, save Settings) with logging enabled, confirming real lines appear in the day's log file with correct context; confirm the retention cron deletes a manually-backdated fake log file; confirm the Advanced tab renders and saves both fields, and that the uninstall checkbox is gone from Tickets & Guards.
+
+**Process:** build one item at a time (9.1 → 9.2 → 9.3), confirm before starting each — same cadence as Phase 7/8.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -1340,4 +1398,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
-| **Total** | **10 weeks + gap closure** | **57 groups** | **~217 tasks** |
+| 9 — Debug Logger | — | 3 items — designed, not started (2026-07-06) | 3 tasks |
+| **Total** | **10 weeks + gap closure** | **58 groups** | **~220 tasks** |
