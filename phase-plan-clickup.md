@@ -1372,10 +1372,10 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 - Docs commit ✅ pushed (2026-07-06) — this section + docs-repo CLAUDE.md.
 - **Next: 9.3 (Instrument Call Sites) — only start when the user explicitly says go.**
 
-### 9.3 Instrument Call Sites — Not started
+### 9.3 Instrument Call Sites — ✅ Complete (2026-07-06)
 
-- [ ] Migrate the 3 existing ad-hoc `error_log()`/`log()` call sites to `STCRM_Logger` instead of running two logging mechanisms in parallel: `STCRM_Freemius_Sync::log()`, `STCRM_Mailer` (`insert_token` failure), `STCRM_Webhook` (signature-mismatch warning).
-- [ ] Add new log calls for state-changing actions only (no reads):
+- [x] Migrate the 3 existing ad-hoc `error_log()`/`log()` call sites to `STCRM_Logger` instead of running two logging mechanisms in parallel: `STCRM_Freemius_Sync::log()`, `STCRM_Mailer` (`insert_token` failure), `STCRM_Webhook` (signature-mismatch warning).
+- [x] Add new log calls for state-changing actions only (no reads):
 
 | Action | File / method |
 |---|---|
@@ -1394,7 +1394,18 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 - Files: all files listed in the table above.
 
-**Testing plan (all 3 sub-items):** direct calls to each new `STCRM_Logger` method confirming correct file path/timezone/format and the disabled-state no-op; a few real end-to-end round trips (create a real ticket, trigger a real webhook, save Settings) with logging enabled, confirming real lines appear in the day's log file with correct context; confirm the retention cron deletes a manually-backdated fake log file; confirm the Advanced tab renders and saves both fields, and that the uninstall checkbox is gone from Tickets & Guards.
+**Implementation notes (2026-07-06):**
+- `tier.resolved` is logged from a **single call site** in `resolve()` itself rather than duplicated across its 3 internal return paths (`verified_result()`, `resolve_via_license_key()`, `unverified_result()`) — `resolve()` was refactored from early-`return`s to an if/elseif/else assigning `$result`, logged once, then returned, since all 3 paths already funnel through the same `verified_result()`/`unverified_result()` shape.
+- `email.sent`/`email.failed` are logged **once**, inside the shared private `send()` method that all 5 `handle_*()` AS handlers already call — avoids duplicating the same log call in 5 places. `email.queued` is logged individually in each of the 5 `queue_*()` methods since those are genuinely distinct entry points with different context (ticket_id vs. contact_id, etc.).
+- The 3 migrated ad-hoc sites **dual-write**: the original `error_log()` (gated on `WP_DEBUG`) is left in place, with a new `STCRM_Logger` call added alongside it — not a replacement. `STCRM_Freemius_Sync::log()`'s private helper now fans out to `STCRM_Logger::info()/warning()/error()` via a `match()` on its existing `$level` string parameter.
+- Anti-enumeration in `request_magic_link()` (always-200 response, no signal on match/no-match) is unaffected — the `magic_link.requested` log call only fires internally on the actual match path, writing to a local file the customer never sees, not to any HTTP response.
+
+**Verified (2026-07-06):** Enabled logging temporarily and drove real traffic through nearly every action: created a real ticket (`ticket.created`, `tier.resolved`, 2× `email.queued`) → posted a real admin reply via the actual REST route (`ticket.message_added`, `email.queued`, `email.sent` ×2 as AS jobs ran) → PATCHed status to resolved (`ticket.status_changed`) → sent a real HMAC-signed webhook request using one configured product's real secret key (`webhook.received`, `webhook.signature_result`, `webhook.event_processed`) → ran a real connection test (`connection.tested`) → saved the real Settings Advanced tab (`settings.saved`) → requested a real magic link for the test contact (`magic_link.requested`, `email.queued`). Read the actual day's log file after each step and confirmed every line appeared with the correct action tag, message, Kathmandu timestamp, and JSON context. `php -l` clean on all 9 touched files.
+- **Incident during verification (test-data hygiene, not a code bug):** found `default_priority_free`/`default_priority_pro` had drifted to stale values (`normal`/`high`) left over from earlier cross-phase test traffic this session rather than their correct `low`/`normal` defaults — confirmed by re-reading the actual `$defaults` array (still correctly `low`/`normal`) and re-checking that neither 9.2's nor 9.3's own diffs touch these two keys anywhere. Restored to the correct values; root cause is confined to this session's own test POSTs across 8.1/9.1/9.2, not a defect in any committed code.
+- All test artifacts (ticket, contact, tokens, log files/directory, admin session tokens) fully deleted afterward; confirmed via direct DB queries that zero rows remain.
+- Plugin commit `5447d73` ✅ pushed (2026-07-06) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit ✅ pushed (2026-07-06) — this section + docs-repo CLAUDE.md.
+- **PHASE 9 (Debug Logger) COMPLETE — all 3 sub-items (9.1, 9.2, 9.3) built, verified, and documented one at a time.**
 
 **Process:** build one item at a time (9.1 → 9.2 → 9.3), confirm before starting each — same cadence as Phase 7/8.
 
@@ -1412,5 +1423,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
-| 9 — Debug Logger | — | 3 items — 9.1/9.2 ✅ complete (2026-07-06), 9.3 not started | 3 tasks |
+| 9 — Debug Logger | — | 3 items — ✅ ALL COMPLETE (2026-07-06) | 3 tasks |
 | **Total** | **10 weeks + gap closure** | **58 groups** | **~220 tasks** |
