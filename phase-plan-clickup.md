@@ -1340,15 +1340,22 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 - **Security:** the log directory gets an `index.php` + `.htaccess` (`Deny from all`) on first write, same pattern most mature WP plugins use to keep a log directory out of direct browser access.
 - **Timezone:** every log line's timestamp is built via `new DateTime('now', new DateTimeZone('Asia/Kathmandu'))` — explicitly Kathmandu, independent of the server's PHP timezone or WordPress's configured site timezone.
 
-### 9.1 Logger Infrastructure — Not started
+### 9.1 Logger Infrastructure — ✅ Complete (2026-07-06)
 
-- [ ] New `includes/Services/class-stcrm-logger.php` — `STCRM_Logger` static facade: `info( string $action, string $message, array $context = [] )`, `warning(...)`, `error(...)`.
-- [ ] Each method no-ops immediately (zero disk I/O) when `STCRM_Settings::get_setting('logging_enabled')` is falsy.
-- [ ] Line format: `[{Y-m-d H:i:s O, Asia/Kathmandu}] [{LEVEL}] {action} — {message}` + ` | context={json}` appended only when `$context` is non-empty.
-- [ ] File path `wp-content/uploads/sublime-crm-logs/{Y-m-d}.log` (Kathmandu date); creates the directory + protection files (`index.php`, `.htaccess`) on first write if missing.
-- [ ] New daily cron `stcrm_purge_old_logs`, scheduled on activation / unscheduled on deactivation (same pattern as `stcrm_purge_expired_tokens`), deletes any `.log` file in the directory older than 30 days.
-- [ ] Write failures (permissions, disk full) are swallowed silently — logging must never break the feature it's observing, matching the existing ad-hoc `log()` methods' behavior.
-- Files: `includes/Services/class-stcrm-logger.php` (new), `includes/class-stcrm-activator.php` (schedule cron), `includes/class-stcrm-deactivator.php` (unschedule cron), `includes/class-sublime-crm.php` (register cron hook + logger instance)
+- [x] New `includes/Services/class-stcrm-logger.php` — `STCRM_Logger` static facade: `info( string $action, string $message, array $context = [] )`, `warning(...)`, `error(...)`.
+- [x] Each method no-ops immediately (zero disk I/O) when `STCRM_Settings::get_setting('logging_enabled')` is falsy.
+- [x] Line format: `[{Y-m-d H:i:s O, Asia/Kathmandu}] [{LEVEL}] {action} — {message}` + ` | context={json}` appended only when `$context` is non-empty.
+- [x] File path `wp-content/uploads/sublime-crm-logs/{Y-m-d}.log` (Kathmandu date); creates the directory + protection files (`index.php`, `.htaccess`) on first write if missing.
+- [x] New daily cron `stcrm_purge_old_logs`, scheduled on activation / unscheduled on deactivation (same pattern as `stcrm_purge_expired_tokens`), deletes any `.log` file in the directory older than 30 days.
+- [x] Write failures (permissions, disk full) are swallowed silently — logging must never break the feature it's observing, matching the existing ad-hoc `log()` methods' behavior.
+- Files: `includes/Services/class-stcrm-logger.php` (new), `includes/class-stcrm-activator.php` (schedule cron), `includes/class-stcrm-deactivator.php` (unschedule cron), `includes/class-sublime-crm.php` (require, register cron hook + `purge_old_logs()` callback), `admin/class-stcrm-settings.php` (`logging_enabled` added to `$defaults`, default `0`)
+
+**Implementation notes (2026-07-06):** `purge_old_logs()` lives on `SublimeCRM` (not `STCRM_Logger` itself) purely for cron-wiring reasons — `STCRM_Loader::add_action()` requires an object+method pair, and `STCRM_Logger` is a pure static facade with no instance to hand it; `SublimeCRM::purge_old_logs()` is a one-line wrapper calling the real static `STCRM_Logger::purge_old_files()`, matching how the other two daily crons (`purge_expired_tokens()`, `auto_close_tickets()`) already live as `SublimeCRM` methods. `logging_enabled` was added to `STCRM_Settings::$defaults` now (default `0`) even though its Settings-tab checkbox doesn't exist until 9.2 — the logger needs the key to exist to check it; 9.2 only adds the UI to change it.
+
+**Verified (2026-07-06):** Direct PHP calls confirmed: (1) with `logging_enabled` at its real default (`0`), calling all 3 log methods created **no** directory at all — genuinely zero disk I/O, not just an empty file; (2) with logging temporarily flipped on, all 3 levels wrote correctly to `sublime-crm-logs/2026-07-06.log` with real Kathmandu timestamps (`+0545` offset confirmed), context correctly JSON-encoded and omitted entirely on the context-less warning call; `index.php`/`.htaccess` created with the right contents; (3) retention: manually created a 40-day-old and a 5-day-old fake `.log` file, ran `purge_old_files()`, confirmed only the 40-day-old one was deleted; (4) cron wiring: `has_action('stcrm_purge_old_logs')` true, `do_action()` fires without a fatal, `STCRM_Activator::activate()` schedules it and `STCRM_Deactivator::deactivate()` unschedules it (re-activated afterward to restore the normal running state). `php -l` clean on all 5 touched files. All test log files/directory deleted afterward and `logging_enabled` reset back to `0`.
+- Plugin commit `1b8d805` ✅ pushed (2026-07-06) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit ✅ pushed (2026-07-06) — this section + docs-repo CLAUDE.md.
+- **Next: 9.2 (Settings "Advanced" Tab) — only start when the user explicitly says go.**
 
 ### 9.2 Settings "Advanced" Tab — Not started
 
@@ -1398,5 +1405,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
-| 9 — Debug Logger | — | 3 items — designed, not started (2026-07-06) | 3 tasks |
+| 9 — Debug Logger | — | 3 items — 9.1 ✅ complete (2026-07-06), 9.2/9.3 not started | 3 tasks |
 | **Total** | **10 weeks + gap closure** | **58 groups** | **~220 tasks** |
