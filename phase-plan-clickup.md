@@ -1290,14 +1290,22 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 > Two Settings-screen items were flagged "⚠️ deferred to Phase 2" back in Phase 1 (2026-06-23) and never picked up in any phase since — confirmed via code search that neither exists anywhere in the plugin as of 2026-07-06. Designed via brainstorming session (2026-07-06) since one item (Connection status) was never actually specced beyond that one-line placeholder, and Phase 6's multi-product Settings (added after the note was written) changes what it even means.
 
-### 8.1 Default Priority Per Tier — Not started
+### 8.1 Default Priority Per Tier — ✅ Complete (2026-07-06)
 
-- [ ] Add `default_priority_pro => 'normal'` and `default_priority_free => 'low'` to `STCRM_Settings::$defaults` — matches current hardcoded behavior exactly, so existing installs see no change until an admin edits it.
-- [ ] Add two `<select>` fields (options: Low/Normal/High/Critical) to the Tickets & Guards tab, next to the existing guard matrix table.
-- [ ] `handle_save()`'s `'tickets'` case validates + saves both against the same `low|normal|high|critical` allow-list the `wp_stcrm_tickets.priority` ENUM uses.
-- [ ] `STCRM_Tier_Resolver::verified_result()` / `unverified_result()` read `STCRM_Settings::get_setting('default_priority_pro'|'default_priority_free')` instead of the hardcoded `'normal'`/`'low'` strings (currently lines 420 and 430 of `class-stcrm-tier-resolver.php`).
+- [x] Add `default_priority_pro => 'normal'` and `default_priority_free => 'low'` to `STCRM_Settings::$defaults` — matches current hardcoded behavior exactly, so existing installs see no change until an admin edits it.
+- [x] Add two `<select>` fields (options: Low/Normal/High/Critical) to the Tickets & Guards tab, next to the existing guard matrix table.
+- [x] `handle_save()`'s `'tickets'` case validates + saves both against the same `low|normal|high|critical` allow-list the `wp_stcrm_tickets.priority` ENUM uses.
+- [x] `STCRM_Tier_Resolver::verified_result()` / `unverified_result()` read `STCRM_Settings::get_setting('default_priority_pro'|'default_priority_free')` instead of the hardcoded `'normal'`/`'low'` strings (currently lines 420 and 430 of `class-stcrm-tier-resolver.php`).
 - Files: `admin/class-stcrm-settings.php` (`$defaults`, `render_page()` Tickets tab, `handle_save()`), `includes/Services/class-stcrm-tier-resolver.php` (`verified_result()`, `unverified_result()`)
 - Spec: `design_handoff_support_crm/README.md` line 144 ("Default priority per tier (Free→Low, Pro→Normal)")
+
+**Implementation notes (2026-07-06):** Reused the existing `STCRM_Admin_Controller::VALID_PRIORITIES` constant (`low`/`normal`/`high`/`critical`) for both the dropdown options and the save-time validation, instead of duplicating the enum list a third place. `handle_save()` falls back to the class default (not just a bare string) on an invalid/missing submitted value, matching the existing pattern elsewhere in the file. `STCRM_Settings::get_setting()` already had a default-fallback chain, so `STCRM_Tier_Resolver` needed only a one-line change per method.
+
+**Verified (2026-07-06):** Confirmed via `ReflectionMethod` that `verified_result()`/`unverified_result()` return the *current* Settings values (not hardcoded) — with defaults untouched, output was still `normal`/`low` (zero regression for existing installs). Live end-to-end via authenticated `curl` against the real `admin-post.php?action=stcrm_save_settings` route: saved `default_priority_free=high`/`default_priority_pro=critical`, confirmed both persisted; then a real `POST /stcrm/v1/tickets` (unverified/free path, no license key) created ticket #24 with `priority = 'high'` in the DB — proving the full chain (Settings → Tier Resolver → Tickets Controller → DB) actually wires together, not just the isolated method. Restored `low`/`normal` afterward and deleted the test ticket/contact.
+- **Incident during verification (self-caused, not a plugin bug):** an early test `curl` call used the wrong POST field name (`tab` instead of the real `stcrm_tab`) for the settings-save form. Because `handle_save()` defaults an unrecognized/missing tab to `'freemius'`, that malformed request was silently processed by the **Freemius tab's** save logic instead of the Tickets tab's — and since the POST body had no `stcrm_settings[products]` field at all, `build_products_from_post()` correctly treated that as "zero product rows submitted," saving `products => []` and wiping all 3 configured products (encrypted tokens/secrets included) from the live option. Caught immediately by checking `GET /stcrm/v1/products` returning `[]`; restored byte-for-byte from a full settings dump captured moments earlier in the same verification pass (same encrypted ciphertext, confirmed by successful `STCRM_Encryption::decrypt()` afterward) — no real credential loss, no admin ever saw a broken state. **Lesson: when driving a multi-tab settings form via raw `curl` instead of the real UI, always snapshot the full option value first, and double-check the actual hidden-field name in the rendered HTML (`stcrm_tab`, not the more guessable `tab`) before assuming a POST landed in the intended tab's `switch` branch — an admin using the real form can't hit this, since the tab template always emits the matching hidden field.**
+- Plugin commit `<pending>` — code fix + plugin CLAUDE.md bundled together, awaiting explicit commit/push instruction.
+- Docs commit `<pending>` — this section, awaiting explicit commit/push instruction.
+- **Next: 8.2 (Connection Status, per product, live API ping) — only start when the user explicitly says go.**
 
 ### 8.2 Connection Status (per product, live API ping) — Not started
 
@@ -1325,5 +1333,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
-| 8 — Settings Gap Closure | — | 2 items — not started (2026-07-06) | 2 tasks |
+| 8 — Settings Gap Closure | — | 2 items — 8.1 ✅ complete (2026-07-06), 8.2 not started | 2 tasks |
 | **Total** | **10 weeks + gap closure** | **57 groups** | **~217 tasks** |
