@@ -28,7 +28,7 @@
   - AS availability check deferred to `plugins_loaded` priority 5 (AS initialises at priority 1)
 - [x] Plugin activates on Laragon without errors — confirmed 2026-06-22
   - "Dependencies missing" warning resolved
-  - "Scheduled Actions" menu: AS initialises correctly (confirmed via `as_enqueue_async_action` = true). Menu does not appear under WP Tools even with EDD disabled — root cause TBD, deferred. Functionally non-blocking.
+  - "Scheduled Actions" menu: ✅ **RESOLVED (2026-07-06)** — not a SublimeCRM/AS bug. Root cause: `wpforms-lite` (also bundles Action Scheduler) calls `remove_submenu_page('tools.php', 'action-scheduler')` on `admin_menu` @ `PHP_INT_MAX` unless WooCommerce/WP Rocket/the standalone AS plugin is active — none of which run on this site, so it silently hid the page for every AS consumer, not just SublimeCRM. Fixed site-wide via `define('WPFORMS_SHOW_ACTION_SCHEDULER_MENU', true);` in `wp-config.php` (WPForms' own documented escape hatch) — no plugin code changed, nothing to commit in this repo or the plugin repo. See the sublimetheme project memory for the full investigation.
 
 ---
 
@@ -54,7 +54,7 @@
   - `composer.json`: `woocommerce/action-scheduler ^3.8`, installed at 3.9.3
   - Bootstrap explicitly `require_once`'d in `sublime-crm.php` (not auto-included via Composer autoload_files)
 - [x] Register Action Scheduler store on `init` — handled internally by AS; hooks `ActionScheduler_Versions::initialize_latest_version` to `plugins_loaded` p1 → `ActionScheduler::init()`
-- [x] AS admin screen under Tools — ⚠️ deferred (known non-blocking issue): AS initialises correctly (`as_enqueue_async_action` available), but menu item does not appear; root cause TBD. No admin screen = no user impact at this stage.
+- [x] AS admin screen under Tools — ✅ resolved 2026-07-06 (was a WPForms menu-hiding conflict, not an AS/plugin issue — see 1.1 note above)
 
 ---
 
@@ -476,7 +476,7 @@
 
 ---
 
-### 3.4 Portal View: New Ticket Form ✅ Complete (2026-06-25, plugin commit TBD)
+### 3.4 Portal View: New Ticket Form ✅ Complete (2026-06-25, plugin commit `9384d5e`)
 
 - [x] Render form fields: Email, Name (optional), Subject, Category (select — from Settings categories), Message textarea, License key (optional), "Add environment details" collapsible (Site URL, WP, PHP, Plugin), honeypot `company_url` (off-screen, `tabIndex=-1`)
 - [x] Sidebar: "Before you post" docs card (search docs button), "★ Pro — Faster replies" blue card, privacy note
@@ -490,7 +490,7 @@
 
 ---
 
-### 3.5 Portal View: Cap Reached (409) ✅ Complete (2026-06-25, plugin commit TBD)
+### 3.5 Portal View: Cap Reached (409) ✅ Complete (2026-06-25, plugin commit `7ed8d23`)
 
 - [x] Show amber banner: "You already have an open ticket" (free) or "You've reached your open ticket limit" (pro)
 - [x] Display existing ticket card: authenticated → `#id` + StatusBadge + subject (fetched via `GET /tickets/{id}`); unauthenticated → `#id` only (session-auth endpoint not callable)
@@ -1154,7 +1154,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 - **Customer portal thread:** loaded `/new-support/?view=thread&ticket=1` with the session cookie — same clean result, no `<img>` in `#crm-portal`.
 - **One red herring caught and ruled out:** a `window.__xss_fired` flag (set by the payload's `onerror`) did fire once, on the admin page — traced it to `#wp-admin-bar-my-account .display-name`, i.e. WordPress **core's own** "Howdy, {display_name}" admin-bar element, which does not escape `display_name` either. Confirmed via direct HTML inspection this is entirely separate from `#crm-thread` (which stayed clean) — it's a pre-existing WP-core behavior, not something this plugin introduced or can fix, and it's self-XSS only (a user can only corrupt their own toolbar when logged in as themselves, not another user's session) — not the cross-privilege escalation finding 7.1 was about.
 - All test artifacts reverted/deleted afterward: `display_name` restored, ticket status restored to `closed`, the injected test system message deleted, and the 8 test session tokens accumulated across both verification passes deleted. Confirmed via a fresh query that ticket #1's message history is back to its original 3 legitimate system messages with no "Mallory" residue.
-- Plugin commit: pending (not yet committed — see chat for commit/push decision)
+- Plugin commit `a833a4c` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `2ac3fe2` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.1 marked complete + docs-repo CLAUDE.md updated.
 
 ### 7.2 Missing index on `wp_stcrm_contacts.email`, hit on every authenticated request — HIGH (Performance) ✅ Complete (2026-07-05)
 
@@ -1166,7 +1167,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 - `sublime-crm.php`: bumped `STCRM_DB_VERSION` from `1.0.1` → `1.0.2` — `STCRM_Database::install()`'s existing version guard re-runs `dbDelta()` on the next load, which adds the new index via `ALTER TABLE` with no separate migration script needed (dbDelta diffs the full `CREATE TABLE` string against the live schema).
 - `api/class-stcrm-session-auth.php` (`authenticate()`): the Phase 6.6 sibling-contact lookup (`STCRM_Database::get_contacts_by_email()`) now only runs when `count( STCRM_Settings::get_settings()['products'] ) > 1`. On single-(or zero-)product installs, `$contact_ids` short-circuits to `[$contact->id]` — no sibling contact under a different product could ever exist there, so the extra query was pure overhead on every authenticated request for those installs.
 - **Verified (2026-07-05):** bootstrapping the live local WP install (which auto-runs the active plugin's own load sequence) confirmed the migration is self-applying — `stcrm_db_version` advanced to `1.0.2` and `SHOW INDEX` confirmed the new `email` key exists, with zero manual migration steps. `EXPLAIN` on the `get_contacts_by_email()` query changed from a full table scan to `type: ref, key: email, rows: 1`. Functional regression + the new short-circuit were both tested directly against `STCRM_Session_Auth::authenticate()` using a real email with 2 sibling contacts across products (`qa-run-0625c@sublimecrm.test`, contacts #4 and #5, left over from Phase 6.6 testing): with the real 3-product Settings, `authenticate()` still returned both sibling IDs (`[5,4]`) — no regression; with Settings temporarily forced down to 1 product, it returned only the anchor's own ID (`[5]`), confirming the short-circuit engages correctly without needing the sibling query to prove it. Settings were restored to the real 3-product config immediately after. Also ran one real end-to-end HTTP round-trip (`curl` against the live `GET /stcrm/v1/tickets` route with a freshly issued session cookie) to confirm the full request chain still returns 200 with correct ticket data. All test session tokens created during verification were deleted afterward.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `b924b8d` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `9035eaa` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.2 marked complete + docs-repo CLAUDE.md updated.
 
 ### 7.3 Synchronous Freemius API call blocks public ticket creation — HIGH (Performance) ✅ Complete (2026-07-05)
 
@@ -1190,7 +1192,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 - **Manually executed the queued job** (simulating AS) with the real stored encrypted key against a fake/test token — the real Freemius API call correctly failed, and the job self-scheduled exactly one retry 1 hour later (`retry=1`, `scheduled_date_gmt` = original + 3600s) — confirms the moved retry logic works.
 - **Live end-to-end HTTP check:** `POST /tickets` with a license key on a token-configured product → 201, `verified:false` (correct — first-time key, not yet resolved). Elapsed ~3.3s vs. a ~3.0s control request with no license key at all (same endpoint, same dev-box WP/REST bootstrap overhead) — confirms the license-key path itself now only adds ~300ms (the async-queue call), not the old worst-case 15s block.
 - All test contacts, tickets, messages, and Action Scheduler jobs created during verification (including the two real REST-created test tickets and their queued confirmation/alert emails) were deleted afterward; confirmed via a fresh query that zero test artifacts remain.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `e6347d2` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `350ac77` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.3 marked complete + docs-repo CLAUDE.md updated.
 - Fix direction: apply the same async-first pattern already used for the "API unreachable" case (`verification_pending` + queued `stcrm_reverify_contact`) to first-time key verification too, instead of blocking the request.
 
 ### 7.4 Uncached 4th duplicate of the portal-URL lookup, on an unrate-limited path — MEDIUM (Performance / Duplication) ✅ Complete (2026-07-05)
@@ -1201,7 +1204,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Implementation notes (2026-07-05):** `STCRM_Auth_Controller::get_portal_url()` now checks the shared `stcrm_portal_page_id` transient first, exactly matching the other three classes' pattern (including `$wpdb->esc_like()`, which this copy hadn't been using — cosmetic-only since the search string is a hardcoded literal, but kept for consistency). No new cache-invalidation logic needed — `SublimeCRM::bust_portal_page_cache()` (hooked to `save_post`) already busts this same shared key for all four consumers.
 
 **Verified (2026-07-05):** via `ReflectionMethod` against the live install, tracking `$wpdb->num_queries` before/after each call. Cold cache (transient deleted first): the lookup runs once, correctly resolves and caches the real portal page ID (`2371`). Warm cache (immediately after): **zero** DB queries — confirms the previously-uncached full `wp_posts` scan is gone. Cross-class check: calling `STCRM_Mailer::get_portal_url()` right after also cost zero queries and returned the same resolved URL, confirming the cache is genuinely shared across all four classes, not just internally consistent within this one. Cache-bust check: simulating a `save_post` action correctly cleared the transient, confirming the existing invalidation hook still covers this 4th consumer with no extra code.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `da6966e` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `ceb0bee` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.4 marked complete + docs-repo CLAUDE.md updated.
 
 ### 7.5 Agent-alert emails have no debounce, unlike customer notifications — MEDIUM (Error Handling / Optimization) ✅ Complete (2026-07-05)
 
@@ -1222,7 +1226,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Implementation notes (2026-07-05):** All 4 methods now capture `$wpdb->update()`'s return into `$result` and check `false === $result` (strict — `0` rows-affected-but-no-error is a legitimate no-op, not a failure) before logging via the existing `log()` helper, mirroring `handle_install_event()`'s pattern exactly. Each log message names the contact ID and product ID so a real failure is actually traceable in `debug.log`, not just "something failed somewhere."
 
 **Verified (2026-07-05):** engineered the exact scenario the finding calls out — two real contacts under the same product, then a `user.updated` webhook event trying to change one contact's email to the other's (a genuine `(product_id, email)` unique-key collision). Confirmed via `debug.log`: WordPress core logged the actual DB error (`Duplicate entry '123456-qa76-bob@sublimecrm.test' for key 'wp_stcrm_contacts.product_email'`), immediately followed by this fix's own line (`[SublimeCRM:error] Failed to update contact #20 for user.updated (product 123456) — possibly a duplicate (product_id, email) collision`) — proving the failure is no longer silent. Also confirmed the contact's email was correctly left unchanged (the update genuinely didn't apply) rather than silently succeeding. Separately drove real `license.expired`, `license.plan.changed`, and `license.extended` events through the other 3 fixed methods to confirm normal successful updates produce **zero** false-positive error log lines — only the one genuine failure appears in `debug.log`, nothing from the 3 successful paths. All test contacts cleaned up afterward.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `c911207` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `b9ab2b9` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.6 marked complete + docs-repo CLAUDE.md updated.
 
 ### 7.7 Freemius license secret sent as a GET query param — MEDIUM (Security, informational) ✅ Closed — accepted risk, no code change to the transmission method (2026-07-05)
 
@@ -1234,7 +1239,8 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Why this is lower-risk in practice than it first looks:** this plugin never logs its own outbound request URLs (no `http_api_debug` hook exists anywhere in the codebase — confirmed by grep during the original Deep QA pass), so the realistic residual exposure is limited to (a) Freemius's own server-side access logs, entirely outside this plugin's control, and (b) a third-party HTTP-debugging tool (e.g. Query Monitor) an admin might separately install and configure to persist full request/response detail — not something this plugin's own code path creates.
 
 **Resolution:** no code change to the transmission method — accepted as an unavoidable constraint of the third-party API, matching the finding's own fix direction ("confirm with Freemius docs whether an alternative exists; otherwise, document as an accepted risk"). Added a code comment at the `verify_key_via_api()` call site explaining this research conclusion, so a future maintainer doesn't mistake it for an unaddressed oversight and doesn't waste time re-investigating the same question.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `41e9dab` ✅ pushed (2026-07-05) — code comment documenting the research conclusion + plugin CLAUDE.md bundled together.
+- Docs commit `ce6bb68` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.7 marked closed (accepted risk) + docs-repo CLAUDE.md updated.
 
 ### 7.8 Admin ticket-list sort has no supporting index — LOW (Performance) ✅ Complete (2026-07-05)
 
@@ -1269,13 +1275,42 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Implementation notes (2026-07-05):** Added `has_invalid_product_id( array $products ): bool` — mirrors `has_duplicate_secret()`'s exact shape, checking every row's `product_id` via `ctype_digit()`. Wired into `handle_save()`'s `freemius` case: checked *before* the duplicate-secret guard, redirecting with `error=invalid_product_id` (no partial save, matching the duplicate-secret pattern's all-or-nothing behavior) if any row fails. Added a matching admin notice in `render_page()` explaining the Product ID must be the numeric Freemius ID, not the product name (a plausible mistake this guards against).
 
 **Verified (2026-07-05):** unit-tested `has_invalid_product_id()` directly via `ReflectionMethod` — all-numeric rows (false), one non-numeric row (true), empty array (false), a leading-zero string like `"007"` (false — still all digits), a decimal `"123.45"` (true), a negative `"-5"` (true). Live end-to-end via authenticated `curl` against the real `admin-post.php?action=stcrm_save_settings` route: submitting a non-numeric Product ID (`abc123`) for an existing product row correctly redirected to `...&error=invalid_product_id`, and a follow-up query confirmed the settings were **not** saved — all 3 original products (including their encrypted tokens/secrets) remained completely unchanged. Regression check: resubmitting the same 3 rows with their real numeric IDs succeeded normally (`...&saved=1`, no error param), with encrypted credentials correctly preserved via the existing "blank keeps existing" logic.
-- Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
+- Plugin commit `a9c0503` ✅ pushed (2026-07-06) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `d93a3ef` ✅ pushed (2026-07-06) — `phase-plan-clickup.md` 7.10 marked complete + "PHASE 7 COMPLETE" summary + docs-repo CLAUDE.md updated.
 
 ---
 
 ## PHASE 7 COMPLETE (2026-07-05)
 
 All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.8, 7.9, 7.10), 1 closed as an accepted risk after research with no code change (7.7 — Freemius's own API leaves no alternative to the query-string secret_key). 7.3's fix also surfaced and fixed a live bug that predated this phase and wasn't one of the original 10 findings: license-key verification had been silently broken since Phase 6.1, because `verify_key_via_api()` was still reading a flat settings key that migration deleted — surfaced to the user via AskUserQuestion before being folded into the 7.3 fix, not silently bundled. Every finding was verified against the real local install — unit tests via `ReflectionMethod` where appropriate, live REST/HTTP round-trips via `curl`, direct DB reads, and one full Playwright browser pass for the stored-XSS finding — not just read through and assumed correct. All fixes and their docs were committed and pushed to both repos one finding at a time, per the user's explicit "fix one at a time" directive.
+
+---
+
+## PHASE 8 — Settings Gap Closure
+
+> Two Settings-screen items were flagged "⚠️ deferred to Phase 2" back in Phase 1 (2026-06-23) and never picked up in any phase since — confirmed via code search that neither exists anywhere in the plugin as of 2026-07-06. Designed via brainstorming session (2026-07-06) since one item (Connection status) was never actually specced beyond that one-line placeholder, and Phase 6's multi-product Settings (added after the note was written) changes what it even means.
+
+### 8.1 Default Priority Per Tier — Not started
+
+- [ ] Add `default_priority_pro => 'normal'` and `default_priority_free => 'low'` to `STCRM_Settings::$defaults` — matches current hardcoded behavior exactly, so existing installs see no change until an admin edits it.
+- [ ] Add two `<select>` fields (options: Low/Normal/High/Critical) to the Tickets & Guards tab, next to the existing guard matrix table.
+- [ ] `handle_save()`'s `'tickets'` case validates + saves both against the same `low|normal|high|critical` allow-list the `wp_stcrm_tickets.priority` ENUM uses.
+- [ ] `STCRM_Tier_Resolver::verified_result()` / `unverified_result()` read `STCRM_Settings::get_setting('default_priority_pro'|'default_priority_free')` instead of the hardcoded `'normal'`/`'low'` strings (currently lines 420 and 430 of `class-stcrm-tier-resolver.php`).
+- Files: `admin/class-stcrm-settings.php` (`$defaults`, `render_page()` Tickets tab, `handle_save()`), `includes/Services/class-stcrm-tier-resolver.php` (`verified_result()`, `unverified_result()`)
+- Spec: `design_handoff_support_crm/README.md` line 144 ("Default priority per tier (Free→Low, Pro→Normal)")
+
+### 8.2 Connection Status (per product, live API ping) — Not started
+
+- [ ] New AJAX handler `wp_ajax_stcrm_test_connection` — nonce + `stcrm_manage_tickets` capability check, reads `product_id` from `$_POST`, mirrors the existing `wp_ajax_stcrm_backfill_status` pattern.
+- [ ] Tests only the **API token** (`GET /v1/products/{id}/licenses.json?count=1`, `Authorization: Bearer {token}` — same call shape as `STCRM_Tier_Resolver::verify_key_via_api()`, cheapest possible page size). The **secret key** is not testable this way — it's only used to verify inbound webhook HMAC signatures, no outbound call exercises it; UI copy must make this distinction clear so a green badge isn't misread as "everything is verified."
+- [ ] Result (`ok` or `error` + message) cached in transient `stcrm_conn_status_{product_id}` (1 hour) with a `checked_at` timestamp — same caching pattern as other per-key Freemius state in this plugin.
+- [ ] Settings → Freemius tab: each saved product row gets a "Test Connection" button + a badge — green "Connected — verified Xm ago" / red "Failed: {message}" — rendered from any cached transient on page load (no auto-ping), refreshed only on click.
+- [ ] **In-place cleanup (small, scoped):** consolidate the duplicated "find this product's row in the settings list by ID" logic — currently separately implemented in `STCRM_Backfill::find_product()` and `STCRM_Tier_Resolver::find_product_api_token()` — into one `STCRM_Settings::find_product_by_id( int $product_id ): ?array` static helper, used by both existing call sites plus this new feature.
+- Files: `admin/class-stcrm-settings.php` (new `find_product_by_id()`, new AJAX handler registration, Freemius tab render + JS), `includes/Services/class-stcrm-backfill.php` (`find_product()` → calls shared helper), `includes/Services/class-stcrm-tier-resolver.php` (`find_product_api_token()` → calls shared helper)
+- Error handling: same `WP_Error`/HTTP-code message shape already used elsewhere in the plugin (e.g. `"Freemius API returned HTTP 401: ..."`) — surfaced as-is, no custom friendly-message mapping.
+- Testing plan: `ReflectionMethod` unit test for the token-lookup consolidation (no behavior change for the 2 existing consumers), then a live `curl` round-trip against the real AJAX endpoint with a valid vs. deliberately-broken token, confirming badge state + transient contents match — same verification style used throughout Phase 6/7.
+
+**Process:** build one item at a time (8.1 then 8.2), confirm before starting each — same cadence as Phase 7's findings.
 
 ---
 
@@ -1290,4 +1325,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
-| **Total** | **10 weeks + gap closure** | **55 groups** | **~215 tasks** |
+| 8 — Settings Gap Closure | — | 2 items — not started (2026-07-06) | 2 tasks |
+| **Total** | **10 weeks + gap closure** | **57 groups** | **~217 tasks** |
