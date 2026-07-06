@@ -1258,13 +1258,24 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 **Implementation notes (2026-07-05):** Added `'resolved_at' => null` to the same `update_ticket()` call that sets `status => 'awaiting_customer'` on a non-note reply — an exact mirror of the customer-side reopen logic in `STCRM_Tickets_Controller::create_message()`. Unconditional (not gated on "was the ticket previously resolved"), matching the customer-side pattern exactly — harmless no-op if `resolved_at` was already null, and also corrects any older stale value left over from an even earlier resolution round. `update_ticket()` already special-cases `null` values correctly (confirmed — this is the same pattern the customer-side reopen has used successfully since Phase 2.5), so no change was needed there.
 
 **Verified (2026-07-05):** created a real isolated ticket in `resolved` status with a deliberately stale `resolved_at` (3 days old), then called the actual `STCRM_Admin_Controller::create_message()` REST handler with a normal agent reply. Confirmed via direct DB read: `status` → `awaiting_customer`, `resolved_at` → SQL `NULL` (not an empty string or zero-date). Confirmed the same fix is visible through the real `GET /admin/tickets/{id}` response (`format_ticket()`'s `resolved_at` field is `null`) — directly closing the stale-Thread-UI-timestamp complaint the finding describes. Regression checks: a second reply to the now-non-resolved ticket left `resolved_at` at `null` with no side effects; separately, an internal note against a freshly re-resolved ticket correctly left both `status` and `resolved_at` completely untouched (confirms the fix is scoped only to the non-note reply branch). All test data cleaned up afterward.
+- Plugin commit `e7e9e67` ✅ pushed (2026-07-05) — code fix + plugin CLAUDE.md bundled together.
+- Docs commit `bae5d81` ✅ pushed (2026-07-05) — `phase-plan-clickup.md` 7.9 marked complete + docs-repo CLAUDE.md updated.
+
+### 7.10 No server-side numeric validation on Settings "Product ID" field — LOW (Security, defense-in-depth) ✅ Complete (2026-07-05) — LAST PHASE 7 FINDING
+
+- [x] `STCRM_Settings::build_products_from_post()` only runs `sanitize_text_field()` on `product_id`, despite the client-side `pattern="[0-9]+"` hint and every downstream consumer treating it as numeric. Admin-only, capability-gated, so not exploitable — just a silent-failure trap (a typo'd non-numeric ID quietly breaks that product's webhook/ticket flows with no validation error at save time).
+- Files: `admin/class-stcrm-settings.php` (`build_products_from_post()`, `has_invalid_product_id()` new, `handle_save()`, `render_page()`)
+
+**Implementation notes (2026-07-05):** Added `has_invalid_product_id( array $products ): bool` — mirrors `has_duplicate_secret()`'s exact shape, checking every row's `product_id` via `ctype_digit()`. Wired into `handle_save()`'s `freemius` case: checked *before* the duplicate-secret guard, redirecting with `error=invalid_product_id` (no partial save, matching the duplicate-secret pattern's all-or-nothing behavior) if any row fails. Added a matching admin notice in `render_page()` explaining the Product ID must be the numeric Freemius ID, not the product name (a plausible mistake this guards against).
+
+**Verified (2026-07-05):** unit-tested `has_invalid_product_id()` directly via `ReflectionMethod` — all-numeric rows (false), one non-numeric row (true), empty array (false), a leading-zero string like `"007"` (false — still all digits), a decimal `"123.45"` (true), a negative `"-5"` (true). Live end-to-end via authenticated `curl` against the real `admin-post.php?action=stcrm_save_settings` route: submitting a non-numeric Product ID (`abc123`) for an existing product row correctly redirected to `...&error=invalid_product_id`, and a follow-up query confirmed the settings were **not** saved — all 3 original products (including their encrypted tokens/secrets) remained completely unchanged. Regression check: resubmitting the same 3 rows with their real numeric IDs succeeded normally (`...&saved=1`, no error param), with encrypted credentials correctly preserved via the existing "blank keeps existing" logic.
 - Plugin commit: pending (not yet committed — awaiting explicit commit/push instruction)
 
-### 7.10 No server-side numeric validation on Settings "Product ID" field — LOW (Security, defense-in-depth)
+---
 
-- [ ] `STCRM_Settings::build_products_from_post()` only runs `sanitize_text_field()` on `product_id`, despite the client-side `pattern="[0-9]+"` hint and every downstream consumer treating it as numeric. Admin-only, capability-gated, so not exploitable — just a silent-failure trap (a typo'd non-numeric ID quietly breaks that product's webhook/ticket flows with no validation error at save time).
-- Files: `admin/class-stcrm-settings.php` (`build_products_from_post()`)
-- Fix direction: validate `product_id` is numeric server-side at save time and reject/flag the row if not, matching the duplicate-secret guard's "reject with a clear error" pattern.
+## PHASE 7 COMPLETE (2026-07-05)
+
+All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.8, 7.9, 7.10), 1 closed as an accepted risk after research with no code change (7.7 — Freemius's own API leaves no alternative to the query-string secret_key). 7.3's fix also surfaced and fixed a live bug that predated this phase and wasn't one of the original 10 findings: license-key verification had been silently broken since Phase 6.1, because `verify_key_via_api()` was still reading a flat settings key that migration deleted — surfaced to the user via AskUserQuestion before being folded into the 7.3 fix, not silently bundled. Every finding was verified against the real local install — unit tests via `ReflectionMethod` where appropriate, live REST/HTTP round-trips via `curl`, direct DB reads, and one full Playwright browser pass for the stored-XSS finding — not just read through and assumed correct. All fixes and their docs were committed and pushed to both repos one finding at a time, per the user's explicit "fix one at a time" directive.
 
 ---
 
@@ -1278,5 +1289,5 @@ User spotted the Inbox header badge ("5") not matching a hand-count of tickets s
 | 4 — Notifications & Hardening | 9–10 | 10 groups | ~35 tasks |
 | 5 — Design-Handoff Gap Closure | — | 11 groups | ~35 tasks |
 | 6 — Multi-Product Freemius Support | — | 5 groups (designed, not started) | ~25 tasks |
-| 7 — Deep QA Findings | — | 10 findings (none started) | 10 tasks |
+| 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | **Total** | **10 weeks + gap closure** | **55 groups** | **~215 tasks** |
