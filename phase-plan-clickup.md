@@ -1448,6 +1448,28 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 ---
 
+## PHASE 11 — Inbox Pagination
+
+> User request (2026-07-07): only 12 tickets exist on this local site today, but a real install could easily reach hundreds — the Inbox needs pagination before that happens. `get_admin_tickets()` already accepts `page`/`per_page` (LIMIT/OFFSET, default 20, capped at 100) but nothing in the REST response ever told the frontend how many total tickets/pages exist, and `inbox.jsx` has zero pagination UI today — every request always implicitly asked for page 1. Designed via brainstorming session (2026-07-07) — key decisions below.
+
+**Design decisions (confirmed via brainstorming, 2026-07-07):**
+- **UI style:** numbered pages + total count — "Page X of Y" with Prev/Next buttons and the total ticket count, at the bottom of the ticket list. User explicitly chose this over a cheaper Prev/Next-only heuristic (no count query) and over infinite scroll/load-more, since predictable page-jumping matters more for triage work than avoiding one extra COUNT query.
+- **Page size:** stays at the existing backend default of 20 — no change to `per_page`, just wiring the frontend to consume it.
+- **Correctness requirement (explicit user emphasis):** pagination must work correctly with every existing filter (status/priority/tier/assignee/product/search) and with the Phase 10 sort options — not just on the unfiltered "all tickets" view. The count query must never drift out of sync with whatever filters are currently applied, since a wrong total/page-count would be worse than no pagination at all.
+- **Backend:** the WHERE-clause-building logic already inside `STCRM_Database::get_admin_tickets()` gets extracted into a shared private helper (e.g. `build_admin_tickets_where( ?int $product_id, array $filters ): array`, returning `[$where_sql, $args]`), reused by both the existing list query and a new `STCRM_Database::count_admin_tickets( ?int $product_id, array $filters ): int` — this is what guarantees the count can never disagree with the list, since they're built from the exact same code path rather than two hand-maintained copies of the same 5-filter logic. `STCRM_Admin_Controller::get_tickets()` calls the new count method and returns the total via the standard WordPress REST collection convention — `X-WP-Total` / `X-WP-TotalPages` response headers — keeping the response body a bare array, unchanged, per this plugin's already-documented "no wrapper" convention (`STCRM_Rest_Helper::success()`).
+- **Frontend:** new `page` state in the `Inbox` component, reset to `1` whenever `filters` or `sortBy` change (a stale page number from a wider view wouldn't make sense once a filter narrows the result set — e.g. being on page 4 of "All tickets" and then filtering to "Critical" should not silently show an empty page 4 of a 1-page result). Fetch switches from plain `apiFetch({ path })` to `apiFetch({ path, parse: false })` to get the raw `Response` object (needed to read the headers), then manually parses the JSON body — reads `X-WP-Total`/`X-WP-TotalPages` into new `total`/`totalPages` state. New pagination bar under `.stcrm-list-pane__rows`: Prev/Next buttons (Prev disabled on page 1, Next disabled on the last page) + "Page X of Y" + total count; the whole bar hides when `totalPages <= 1`.
+
+- [ ] Extract `build_admin_tickets_where()` shared helper in `STCRM_Database`; refactor `get_admin_tickets()` to use it
+- [ ] New `STCRM_Database::count_admin_tickets( ?int $product_id, array $filters ): int` using the same shared helper
+- [ ] `STCRM_Admin_Controller::get_tickets()` calls `count_admin_tickets()`, sets `X-WP-Total` / `X-WP-TotalPages` headers on the response
+- [ ] `Inbox` component (`src/admin/inbox.jsx`): add `page`/`total`/`totalPages` state; reset `page` to 1 on `filters`/`sortBy` change; switch fetch to `parse: false` + manual header read
+- [ ] New pagination bar component under the ticket list — Prev/Next + "Page X of Y" + total count, hidden when `totalPages <= 1`
+- Files: `includes/Database/class-stcrm-database.php`, `api/class-stcrm-admin-controller.php`, `src/admin/inbox.jsx`, `admin/css/stcrm-admin.css` (pagination bar styling)
+
+**Process:** single cohesive change, built and verified as one unit, same cadence as Phase 10 — correctness against every filter combination (status/priority/tier/assignee/product/search) and every Phase 10 sort option is the explicit acceptance bar, not just the unfiltered default view.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -1462,4 +1484,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
 | 9 — Debug Logger | — | 3 items — ✅ ALL COMPLETE (2026-07-06) | 3 tasks |
 | 10 — Dynamic Inbox Sort | — | 1 group — ✅ COMPLETE (2026-07-07) | 5 tasks |
-| **Total** | **10 weeks + gap closure** | **59 groups** | **~225 tasks** |
+| 11 — Inbox Pagination | — | 1 group (designed, not started) | ~5 tasks |
+| **Total** | **10 weeks + gap closure** | **60 groups** | **~230 tasks** |
