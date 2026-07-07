@@ -1411,6 +1411,32 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 ---
 
+## PHASE 10 — Dynamic Inbox Sort
+
+> User request (2026-07-07): the Inbox's "Sort: Smart" label is static text, not a functional control — surfaced while reviewing why priority badges seemed inconsistent across tickets. Only one sort order has ever existed (`verified DESC, priority DESC, last_activity_at DESC`), matching this doc's own 5.9 note that no alternate sort was ever specced. Designed via brainstorming session (2026-07-07) — key decisions below.
+
+**Design decisions (confirmed via brainstorming, 2026-07-07):**
+- **Sort options (4 total):**
+  - **Smart** (default, unchanged) — `verified DESC, priority DESC, last_activity_at DESC`
+  - **Priority** (new) — `priority DESC, last_activity_at DESC`, deliberately ignoring verified/tier entirely — a pure urgency-triage view, distinct from Smart's tier-aware ordering
+  - **Newest first** (new) — `last_activity_at DESC`
+  - **Oldest first** (new) — `last_activity_at ASC`
+- **UI:** the static `Sort: Smart` text in `TicketListHeader` (`src/admin/inbox.jsx`) becomes a real `<select>` in the same spot. Unlike the Status/Priority/Tier/Assignee/Product filters (PHP-rendered `<select>`s bridged into the React island via DOM `change` listeners, since they sit in the PHP-rendered toolbar above the mount point), this control lives entirely inside the React-rendered area — so it's implemented as ordinary React state (`sortBy`), no PHP template change needed.
+- **Persistence:** chosen sort is written to `localStorage` (`stcrm_inbox_sort`) on change and read back as the initial state on mount (falling back to `'smart'` if unset/invalid) — unlike the filters, which are session-only today, sort is treated as a sticky workflow preference per the user's explicit choice.
+- **Data flow:** `sortBy` joins the existing `filters` object already serialized into the `GET /stcrm/v1/admin/tickets` query string on every filter change — reuses the exact re-fetch mechanism filters already use, just one more query param (`sort=smart|priority|newest|oldest`).
+- **Backend:** `STCRM_Admin_Controller::register_routes()` adds a `sort` arg to `/admin/tickets` with `'enum' => ['smart','priority','newest','oldest'], 'default' => 'smart'` (same validation pattern already used for `tier`). `get_tickets()` reads + passes it through as a new 5th parameter to `STCRM_Database::get_admin_tickets()` — kept separate from the `$filters` array since it's an `ORDER BY` concern, not a `WHERE` concern. `get_admin_tickets()` picks the `ORDER BY` clause via a whitelisted `switch` on the 4 known values (never interpolates the raw request value into SQL, even though it's already enum-validated upstream).
+
+- [ ] Add `sort` route arg (enum: smart/priority/newest/oldest, default smart) to `GET /admin/tickets` in `STCRM_Admin_Controller::register_routes()`
+- [ ] `get_tickets()` reads + whitelists `sort`, passes as new `$sort` param to `get_admin_tickets()`
+- [ ] `STCRM_Database::get_admin_tickets()` gains a `string $sort = 'smart'` parameter; `ORDER BY` selected via whitelisted switch over the 4 options
+- [ ] `TicketListHeader` (`src/admin/inbox.jsx`): replace static "Sort: Smart" text with a controlled `<select>` (Smart/Priority/Newest first/Oldest first)
+- [ ] `Inbox` component: add `sortBy` state, read initial value from `localStorage('stcrm_inbox_sort')` (fallback `'smart'`), write on change, include in the `filters`-driven fetch's query params
+- Files: `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/inbox.jsx`
+
+**Process:** single cohesive change, built and verified as one unit (not split into sub-items like Phase 8/9, since the pieces aren't independently useful on their own).
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -1424,4 +1450,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
 | 9 — Debug Logger | — | 3 items — ✅ ALL COMPLETE (2026-07-06) | 3 tasks |
-| **Total** | **10 weeks + gap closure** | **58 groups** | **~220 tasks** |
+| 10 — Dynamic Inbox Sort | — | 1 group (designed, not started) | ~5 tasks |
+| **Total** | **10 weeks + gap closure** | **59 groups** | **~225 tasks** |
