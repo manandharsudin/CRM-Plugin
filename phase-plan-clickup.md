@@ -1426,12 +1426,23 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 - **Data flow:** `sortBy` joins the existing `filters` object already serialized into the `GET /stcrm/v1/admin/tickets` query string on every filter change — reuses the exact re-fetch mechanism filters already use, just one more query param (`sort=smart|priority|newest|oldest`).
 - **Backend:** `STCRM_Admin_Controller::register_routes()` adds a `sort` arg to `/admin/tickets` with `'enum' => ['smart','priority','newest','oldest'], 'default' => 'smart'` (same validation pattern already used for `tier`). `get_tickets()` reads + passes it through as a new 5th parameter to `STCRM_Database::get_admin_tickets()` — kept separate from the `$filters` array since it's an `ORDER BY` concern, not a `WHERE` concern. `get_admin_tickets()` picks the `ORDER BY` clause via a whitelisted `switch` on the 4 known values (never interpolates the raw request value into SQL, even though it's already enum-validated upstream).
 
-- [ ] Add `sort` route arg (enum: smart/priority/newest/oldest, default smart) to `GET /admin/tickets` in `STCRM_Admin_Controller::register_routes()`
-- [ ] `get_tickets()` reads + whitelists `sort`, passes as new `$sort` param to `get_admin_tickets()`
-- [ ] `STCRM_Database::get_admin_tickets()` gains a `string $sort = 'smart'` parameter; `ORDER BY` selected via whitelisted switch over the 4 options
-- [ ] `TicketListHeader` (`src/admin/inbox.jsx`): replace static "Sort: Smart" text with a controlled `<select>` (Smart/Priority/Newest first/Oldest first)
-- [ ] `Inbox` component: add `sortBy` state, read initial value from `localStorage('stcrm_inbox_sort')` (fallback `'smart'`), write on change, include in the `filters`-driven fetch's query params
-- Files: `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/inbox.jsx`
+- [x] Add `sort` route arg (enum: smart/priority/newest/oldest, default smart) to `GET /admin/tickets` in `STCRM_Admin_Controller::register_routes()`
+- [x] `get_tickets()` reads + whitelists `sort`, passes as new `$sort` param to `get_admin_tickets()`
+- [x] `STCRM_Database::get_admin_tickets()` gains a `string $sort = 'smart'` parameter; `ORDER BY` selected via whitelisted switch over the 4 options
+- [x] `TicketListHeader` (`src/admin/inbox.jsx`): replace static "Sort: Smart" text with a controlled `<select>` (Smart/Priority/Newest first/Oldest first)
+- [x] `Inbox` component: add `sortBy` state, read initial value from `localStorage('stcrm_inbox_sort')` (fallback `'smart'`), write on change, include in the `filters`-driven fetch's query params
+- Files: `api/class-stcrm-admin-controller.php`, `includes/Database/class-stcrm-database.php`, `src/admin/inbox.jsx`, `admin/css/stcrm-admin.css`
+
+**Implementation notes (2026-07-07):** `TicketList` had an early-return-while-loading branch that unmounted its whole subtree (including `TicketListHeader`) on every fetch — left as-is, the sort `<select>` itself would've vanished and remounted on every single sort change, which is broken UX for a dropdown the user just clicked. Restructured so `TicketListHeader` (and its `<select>`) always renders; only the rows-vs-empty-vs-loading body switches. New `STCRM_Admin_Controller::VALID_SORTS` constant mirrors the existing `VALID_STATUSES`/`VALID_PRIORITIES` pattern — used both as the route arg's `enum` (self-documenting only, per this codebase's existing convention that WP's REST arg schema isn't auto-enforced without an explicit `validate_callback`) and as the real manual whitelist check in `get_tickets()`. `get_admin_tickets()`'s new `$order_by` lookup array only ever contains 4 hardcoded literal strings — the `$sort` parameter selects among them via array key lookup, never concatenated into the SQL itself, so there's no injection surface even before the REST-layer validation. CSS: `.stcrm-list-pane__sort` (previously just font-size/color on a `<span>`) gained `background:transparent; border:none; box-shadow:none; cursor:pointer` so the native `<select>` keeps the original minimal "plain text with a caret" look rather than picking up default browser select chrome.
+
+**Verified (2026-07-07):**
+- Backend, isolated: a PHP CLI script bootstrapping WordPress and calling `STCRM_Database::get_admin_tickets(null, [], 1, 20, $sort)` directly for all 4 values against the real 12-ticket dataset — confirmed each produces a distinct, correctly-ordered id sequence (`newest`/`oldest` exact mirror images of each other; `priority` groups high→normal→low correctly; `smart` and `priority` happen to match on this dataset only because no ticket here has `verified=1`, which is expected, not a bug).
+- Backend, REST layer: a second PHP CLI script instantiating `STCRM_Admin_Controller` directly and calling `get_tickets()` with a real `WP_REST_Request`, including a deliberately invalid `sort=bogus` value — confirmed it silently falls back to the same order as `sort=smart` (proving the manual whitelist guard works), while the 3 real values each matched the isolated DB-method test above exactly.
+- Frontend, full browser round trip via a one-off Playwright script (logged in as a real admin user, navigated to the real Inbox page): switched the dropdown through Newest → Oldest → Priority and read the actual rendered ticket-ID order after each change (via `page.waitForResponse` on the real `sort=` query param, not a fixed timeout — an earlier version of the test script raced ahead of the real network round trip and produced false negatives, since nothing in the app itself serializes/cancels in-flight fetches when the sort changes rapidly) — every order exactly matched the backend-only verification above. Reloaded the page afterward and confirmed both the `<select>`'s value and the ticket order came back as `Priority` (the last selection), proving the `localStorage` persistence round-trips correctly, not just writes. Screenshot confirmed the dropdown renders inline as "Sort: Priority" matching the design intent, and incidentally reconfirmed the earlier Normal-priority-badge fix is still working (ticket #1 shows a "Normal" badge in this same screenshot).
+- `php -l` clean on both backend files; `npm run build` recompiled `stcrm-inbox.js` successfully; grepped the compiled bundle to confirm `stcrm_inbox_sort` (the localStorage key) and all 3 new option labels are present.
+- All test scripts/screenshots were one-off files in the session scratchpad, not part of either repo — nothing to clean up in-repo.
+
+**PHASE 10 (Dynamic Inbox Sort) COMPLETE — built and verified as one cohesive unit.**
 
 **Process:** single cohesive change, built and verified as one unit (not split into sub-items like Phase 8/9, since the pieces aren't independently useful on their own).
 
@@ -1450,5 +1461,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 7 — Deep QA Findings | — | 10 findings — ✅ ALL COMPLETE (2026-07-05) | 10 tasks |
 | 8 — Settings Gap Closure | — | 2 items — ✅ ALL COMPLETE (2026-07-06) | 2 tasks |
 | 9 — Debug Logger | — | 3 items — ✅ ALL COMPLETE (2026-07-06) | 3 tasks |
-| 10 — Dynamic Inbox Sort | — | 1 group (designed, not started) | ~5 tasks |
+| 10 — Dynamic Inbox Sort | — | 1 group — ✅ COMPLETE (2026-07-07) | 5 tasks |
 | **Total** | **10 weeks + gap closure** | **59 groups** | **~225 tasks** |
