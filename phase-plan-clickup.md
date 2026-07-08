@@ -1481,6 +1481,31 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 
 ---
 
+## PHASE 12 — Free (WP.org) Product Support
+
+> User request (2026-07-08): "Products" today only means Freemius products — `STCRM_Settings::$defaults['products']` rows are Freemius-shaped end to end (`product_id` = numeric Freemius ID, `secret_key`, `api_token`), and `resolve_product_id()` in `STCRM_Tickets_Controller::create_ticket()` hard-rejects any `product_id` not in that list. But this vendor also ships free themes/plugins hosted only on WordPress.org, with no Freemius product at all — those customers currently have no way to open a support ticket about them. Designed via brainstorming session (2026-07-08) — key decisions below.
+
+**Design decisions (confirmed via brainstorming, 2026-07-08):**
+- **IA placement:** the "Freemius" Settings tab is renamed **"Products"**. Free/WP.org products live in the *same* repeatable `products` list as Freemius products, distinguished by a new **`source`** field (`'freemius'` default | `'wporg'`) — not a separate tab or a separate settings array. User explicitly chose one tagged list over a second parallel list, since every downstream consumer (ticket-form dropdown, Inbox product filter, `find_product_by_id()`) already just iterates "the products list" generically.
+- **Tier/verification for free products:** always `tier=free`, `verified=0`, priority = `default_priority_free` — **no** license-key field, **no** Freemius API call, **no** tier-resolver invocation at all for a `wporg` product's tickets. User explicitly rejected running tier resolution "just in case the same email owns a paid product elsewhere" as unnecessary complexity conflating two different concerns.
+- **Free product ID:** admin types only a **Label** for a `wporg` row — no ID field, no WP.org slug field (YAGNI; nothing would read a slug yet). The plugin auto-assigns the row's `product_id` from a reserved range starting at **900,000,000** (a monotonic counter under a new `next_wporg_id` settings key) — guaranteed to never collide with a real Freemius numeric product ID, which this plugin only ever accepts as an admin-typed value in the Freemius branch of the same form.
+- **Code pattern:** one new static helper, `STCRM_Settings::is_freemius_product( array $row ): bool`, used at every branch point (Settings render, ticket-form validation/tier-skip, webhook matching, backfill, connection test). Plain-array rows stay plain arrays — no new value-object class — matching this plugin's existing convention that contacts/tickets/products are all arrays + static service classes, never typed objects.
+- **Compatibility:** no DB schema change. `wp_stcrm_tickets.product_id`/`wp_stcrm_contacts.product_id` stay `bigint(20) unsigned` as-is; a `wporg` ticket's `tier`/`tier_at_open`/`verified` columns just always hold the same `free`/`free`/`0` values the schema already supports for any unverified free-tier ticket today. Existing saved `products` rows get `source: 'freemius'` for free via `wp_parse_args()` against the updated defaults — no migration routine needed.
+
+- [ ] `STCRM_Settings::$defaults['products']` rows gain `source` key (default `'freemius'` on read via `wp_parse_args`); new `next_wporg_id` settings key (default `900000001`)
+- [ ] New `STCRM_Settings::is_freemius_product( array $row ): bool` helper
+- [ ] Settings: rename "Freemius" tab label to "Products"; add Source toggle to `render_product_row()` — Freemius branch unchanged (Label/Product ID/API Token/Secret Key/Test Connection/Backfill); wporg branch shows only Label, auto-assigns `product_id` from `next_wporg_id` counter on first save of a new row (preserved on subsequent edits, matched by the existing row-key mechanism `build_products_from_post()` already uses)
+- [ ] `has_invalid_product_id()` / `has_duplicate_secret()` in `handle_save()` skip `wporg` rows (nothing to validate — no user-typed ID, no secret)
+- [ ] `GET /stcrm/v1/products` includes `source` per row
+- [ ] `NewTicketView.jsx` hides the License Key field when the selected product's `source` is `wporg`
+- [ ] `STCRM_Tickets_Controller::resolve_product_id()` returns the full matched product row (not just an int); `create_ticket()` skips `STCRM_Tier_Resolver::resolve()` for `wporg` products, going straight to `tier=free, verified=0, priority=default_priority_free`
+- [ ] `STCRM_Webhook`, `STCRM_Backfill`, and the Settings "Test Connection" AJAX handler each guard their product-iteration loop with `is_freemius_product()` (wporg rows have no `secret_key`/`api_token` to match/use — one-line guard each, no restructuring)
+- Files: `admin/class-stcrm-settings.php`, `admin/js/stcrm-settings.js`, `api/class-stcrm-tickets-controller.php`, `api/class-stcrm-webhook.php`, `includes/Services/class-stcrm-tier-resolver.php`, `includes/Services/class-stcrm-backfill.php`, `src/portal/NewTicketView.jsx`
+
+**Process:** build as one cohesive change (not split into sub-items) — only start when the user explicitly says go, per the established one-at-a-time cadence.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
@@ -1496,4 +1521,5 @@ All 10 Deep QA findings resolved: 9 fixed with code changes (7.1, 7.2, 7.3, 7.4,
 | 9 — Debug Logger | — | 3 items — ✅ ALL COMPLETE (2026-07-06) | 3 tasks |
 | 10 — Dynamic Inbox Sort | — | 1 group — ✅ COMPLETE (2026-07-07) | 5 tasks |
 | 11 — Inbox Pagination | — | 1 group — ✅ COMPLETE (2026-07-07) | 5 tasks |
-| **Total** | **10 weeks + gap closure** | **60 groups** | **~230 tasks** |
+| 12 — Free (WP.org) Product Support | — | 1 group — designed, not started (2026-07-08) | 8 tasks |
+| **Total** | **10 weeks + gap closure** | **61 groups** | **~238 tasks** |
