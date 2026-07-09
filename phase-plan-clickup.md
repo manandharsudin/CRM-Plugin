@@ -1579,6 +1579,20 @@ While investigating, also found and fixed a real but unrelated hardening gap: th
 
 ---
 
+### Bugfix follow-up — portal password login now also starts a real WP session (2026-07-08, same day)
+
+After the above shipped, user reported the portal's "My tickets" view rendered as authenticated, but WordPress's own "My Account"/admin bar still showed as a guest — the two logins were never actually the same thing. That was Phase 13's original, deliberate design choice: `login_wp_account()` never called `wp_set_auth_cookie()`, specifically "so signing into the support portal never doubles as a native WP dashboard login."
+
+User's explicit correction, when asked what "not actually logged in" meant: it's the WP admin bar / My Account link not reflecting the portal sign-in.
+
+**Before changing this, the real trade-off was raised directly and confirmed explicitly** (not assumed): making portal password login also call `wp_set_auth_cookie()` turns the little "Sign in to view your tickets" form into a second, full wp-admin-equivalent login gate for *any* WP account — including elevated roles, not just customers. User confirmed: yes, do it anyway.
+
+**Fix:** `login_wp_account()` now calls `wp_set_auth_cookie( $user->ID, true )` + `wp_set_current_user( $user->ID )` immediately after `wp_authenticate()` succeeds ("remember" true, matching the portal session's own 30-day lifetime so the two don't silently drift apart a few days later). A second, related judgment call — should the portal's "Sign out" also end the WP session — was raised and confirmed separately (an admin idly clicking "Sign out" on the support widget while mid-task in wp-admin is a real, different risk than the login-side question): confirmed yes, so `signout()` now also calls `wp_logout()` whenever a WP session is present.
+
+**Verified live via Playwright:** after a portal password login, a direct navigation to `/wp-admin/` loads the Dashboard with no redirect to `wp-login.php`, confirmed via the real `wordpress_logged_in_*` cookie being set (previously absent). The portal itself continued to work correctly on the very next page load — self-healed past two expected transient `403 rest_cookie_invalid_nonce` responses from WP core's own nonce check (the exact mechanism from the earlier nonce investigation in this bugfix's first entry), then `200`s. Since nearly every portal password login now also carries a live WP cookie, that self-heal path is the *normal* case going forward, not a rare edge case — worth remembering if a future nonce-related symptom resurfaces.
+
+---
+
 ## Summary
 
 | Phase | Weeks | Task groups | Approx tasks |
